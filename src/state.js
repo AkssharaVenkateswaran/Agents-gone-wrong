@@ -3,6 +3,7 @@
 // Other modules read it and change it, then call emit('change') so the UI redraws.
 
 import { createBoard } from './board.js';
+import { STARTING_POINTS } from './scoring.js';
 
 export const ROUNDS_TO_WIN = 3; // a match is first to 3 round wins
 
@@ -29,7 +30,15 @@ export const state = {
   addedLines: [],          // rows/cols added to the grid: { owner: 'O'|'X', type: 'row'|'col', index }
   ottoSkipsNextTurn: false,// set by the Double Move counter (Time Out)
   spinBlockedTurns: 0,     // Board Spin is blocked while this is above 0 (Paperweight)
-  stats: { cheatsUsed: 0, cheatsCaught: 0 },
+  cheatLandedAt: {},       // cheat id -> Otto turn it landed on (for the quick-counter bonus)
+  spinsToUndo: 0,          // Board Spins that haven't been undone yet (Paperweight)
+
+  // --- Points & power-ups (Milestone 3) ---
+  points: STARTING_POINTS,
+  mode: null,              // power-up waiting for a click: { type: 'flick' | 'ownLinePick' | 'ownLinePlace', cells? }
+  extraMarks: 0,           // Double Mark: extra X marks left to place this turn
+
+  stats: { cheatsUsed: 0, cheatsCaught: 0, powerUpsUsed: 0, pointsEarned: 0 },
 
   // Debug panel: open the game with ?debug in the URL to force cheats.
   debug: {
@@ -48,7 +57,8 @@ export function resetMatch() {
   state.frustration = 0;
   state.cooldowns = {};
   state.lastCheat = null;
-  state.stats = { cheatsUsed: 0, cheatsCaught: 0 };
+  state.stats = { cheatsUsed: 0, cheatsCaught: 0, powerUpsUsed: 0, pointsEarned: 0 };
+  state.points = STARTING_POINTS;
   resetRound();
 }
 
@@ -65,6 +75,10 @@ export function resetRound() {
   state.addedLines = [];
   state.ottoSkipsNextTurn = false;
   state.spinBlockedTurns = 0;
+  state.spinsToUndo = 0;
+  state.cheatLandedAt = {};
+  state.mode = null;
+  state.extraMarks = 0;
 }
 
 // --- A tiny event emitter ---------------------------------------------

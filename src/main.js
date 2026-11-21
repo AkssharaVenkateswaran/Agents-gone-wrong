@@ -2,6 +2,7 @@
 // Boots the game and runs the turn loop:
 //
 //   player clicks a square -> place X -> check for win/draw
+//     (on their turn the player can also spend points on power-ups)
 //   -> Otto's turn:
 //        maybe pick a cheat -> TELEGRAPH it (Otto wobbles, "hehe…") for ~1 second
 //            -> player clicks Otto in time? CAUGHT! (cheat blocked, Otto moves normally)
@@ -14,9 +15,11 @@ import { state, on, emit, resetMatch, resetRound, ROUNDS_TO_WIN } from './state.
 import { findWinner, isFull, isPlayable, findWinningMove, perfectPlayResult } from './board.js';
 import { chooseMove, pickCheat, addFrustration, tickCooldowns } from './agent.js';
 import { getCheat } from './cheats.js';
+import { getPowerUp, canAfford } from './powerups.js';
+import { addPoints, POINTS, QUICK_COUNTER_TURNS } from './scoring.js';
 import { say } from './dialogue.js';
 import { initRender } from './ui/render.js';
-import { showStamp, spinBoardEffect } from './ui/effects.js';
+import { showStamp, spinBoardEffect, popPoints } from './ui/effects.js';
 
 const OTTO_THINK_MS = 600;  // small pause so Otto's move doesn't feel instant
 const TELEGRAPH_MS = 1100;  // how long the player has to catch a cheat
@@ -34,14 +37,76 @@ function later(ms, fn) {
 
 // --- Player's turn -----------------------------------------------------------
 
-function playerMove(index) {
-  if (state.turn !== 'X' || state.roundOver || state.matchOver) return;
-  if (!isPlayable(state.board, index)) return; // taken, or a minion is there
+function isPlayersTurn() {
+  return state.turn === 'X' && !state.roundOver && !state.matchOver;
+}
 
+// Give the player points and show a "+N" pop.
+function earn(amount) {
+  addPoints(state, amount);
+  popPoints(amount);
+}
+
+// The player clicked (or pressed Enter on) a square.
+function onCellClick(index) {
+  if (!isPlayersTurn()) return;
+
+  // Clicking a minion flicks it off the board (that's the Flick power-up).
+  if (state.board.minions[index]) {
+    flickMinion(index);
+    return;
+  }
+
+  // Flick mode is waiting for a minion: any other square is ignored.
+  if (state.mode?.type === 'flick') {
+    state.notice = 'Click a minion to flick it (Esc to cancel).';
+    emit('change');
+    return;
+  }
+  if (state.mode?.type === 'ownLinePick') return; // choose row/column in the tray first
+
+  if (!isPlayable(state.board, index)) return; // square already taken
+
+  // My Own Line: the free X must go in the new line, and doesn't use up the turn.
+  if (state.mode?.type === 'ownLinePlace') {
+    if (!state.mode.cells.includes(index)) return;
+    state.mode = null;
+    placeX(index);
+    if (checkRoundEnd()) return;
+    state.notice = 'Free X placed! Now make your normal move.';
+    emit('change');
+    return;
+  }
+
+  placeX(index);
+  if (checkRoundEnd()) return;
+
+  // Double Mark: the player gets to place another X before Otto moves.
+  if (state.extraMarks > 0) {
+    state.extraMarks--;
+    state.notice = 'Double Mark! Place your second X.';
+    emit('change');
+    return;
+  }
+
+  endPlayerTurn();
+}
+
+// Put an X on the board and award points for it.
+function placeX(index) {
   const ottoThreat = findWinningMove(state.board, 'O'); // was Otto about to win?
   state.board.cells[index] = 'X';
   state.notice = '';
+  earn(POINTS.placeX);
 
+  if (index === ottoThreat) {
+    earn(POINTS.block);
+    state.ottoSays = say('playerBlocks');
+    if (state.round >= 2 && addFrustration(state, 5)) state.ottoSays = say('frustration');
+  }
+}
+
+function endPlayerTurn() {
   // Lights Out wears off after a few player turns.
   if (state.lightsOut) {
     state.lightsOut.turnsLeft--;
@@ -51,28 +116,134 @@ function playerMove(index) {
     }
   }
 
-  if (checkRoundEnd()) return;
-
-  // Frustration: blocking Otto, or the game heading for a draw, annoys Otto.
-  if (state.round >= 2) {
-    let crossedLevel = false;
-    if (index === ottoThreat) {
-      crossedLevel = addFrustration(state, 5);
-      state.ottoSays = say('playerBlocks');
-    } else if (
-      state.board.rows === 3 &&
-      state.board.cols === 3 &&
-      perfectPlayResult(state.board, 'O') === 'draw'
-    ) {
-      crossedLevel = addFrustration(state, 4);
-      if (Math.random() < 0.3) state.ottoSays = say('bored');
-    }
-    if (crossedLevel) state.ottoSays = say('frustration');
+  // Frustration: the game heading for a draw bores Otto.
+  if (
+    state.round >= 2 &&
+    state.board.rows === 3 &&
+    state.board.cols === 3 &&
+    perfectPlayResult(state.board, 'O') === 'draw'
+  ) {
+    if (addFrustration(state, 4)) state.ottoSays = say('frustration');
+    else if (Math.random() < 0.3) state.ottoSays = say('bored');
   }
 
   state.turn = 'O';
   emit('change');
   later(OTTO_THINK_MS, ottoTurn);
+}
+
+// --- Power-ups ---------------------------------------------------------------
+
+// The player clicked a power-up in the tray (or pressed its number key).
+function activatePowerUp(id) {
+  if (!isPlayersTurn()) return;
+  const powerUp = getPowerUp(id);
+
+  // Pressing an active power-up again cancels it.
+  if (state.mode && modeOwner(state.mode) === id) {
+    cancelMode();
+    return;
+  }
+  if (state.mode?.type === 'ownLinePlace') {
+    state.notice = 'Place your free X in your new line first.';
+    emit('change');
+    return;
+  }
+  if (!canAfford(state, powerUp)) {
+    state.notice = `${powerUp.name} costs ${powerUp.cost} points. You have ${state.points}.`;
+    emit('change');
+    return;
+  }
+  if (!powerUp.canUse(state)) {
+    state.notice = `${powerUp.name} won't do anything right now.`;
+    emit('change');
+    return;
+  }
+
+  if (id === 'flick') {
+    // One minion? Flick it straight away. Several? Let the player choose.
+    const minions = state.board.minions.flatMap((m, i) => (m ? [i] : []));
+    if (minions.length === 1) {
+      flickMinion(minions[0]);
+    } else {
+      state.mode = { type: 'flick' };
+      state.notice = 'Click a minion to flick it (Esc to cancel).';
+      emit('change');
+    }
+    return;
+  }
+
+  if (id === 'myOwnLine') {
+    state.mode = { type: 'ownLinePick' };
+    state.notice = 'Add a row or a column? (Esc to cancel)';
+    emit('change');
+    return;
+  }
+
+  // Everything else happens immediately.
+  pay(powerUp);
+  powerUp.apply(state);
+  state.notice = `${powerUp.name}! ${powerUp.help}`;
+  afterPowerUp(powerUp);
+}
+
+function flickMinion(index) {
+  const flick = getPowerUp('flick');
+  if (!canAfford(state, flick)) {
+    state.notice = `Flicking a minion costs ${flick.cost} points. You have ${state.points}.`;
+    emit('change');
+    return;
+  }
+  state.mode = null;
+  pay(flick);
+  flick.apply(state, index);
+  state.notice = 'Flick! The minion goes flying.';
+  afterPowerUp(flick);
+}
+
+// My Own Line: the player chose 'row' or 'col' in the tray.
+function chooseOwnLine(type) {
+  if (state.mode?.type !== 'ownLinePick') return;
+  const powerUp = getPowerUp('myOwnLine');
+  pay(powerUp);
+  powerUp.apply(state, type); // adds the line and switches to 'ownLinePlace' mode
+  state.notice = 'Your new line is ready. Click a square in it for your free X.';
+  emit('change');
+}
+
+function cancelMode() {
+  if (!state.mode || state.mode.type === 'ownLinePlace') return; // already paid: can't cancel
+  state.mode = null;
+  state.notice = '';
+  emit('change');
+}
+
+// Which power-up started a mode?
+function modeOwner(mode) {
+  if (mode.type === 'flick') return 'flick';
+  return 'myOwnLine';
+}
+
+function pay(powerUp) {
+  state.points -= powerUp.cost;
+  state.stats.powerUpsUsed++;
+}
+
+// Shared clean-up after a power-up: counter bonus, Otto's reaction, win check.
+function afterPowerUp(powerUp) {
+  const cheatId = powerUp.counters;
+  if (cheatId) {
+    // +2 if this counters a cheat that landed within the last 2 Otto turns.
+    const landedAt = state.cheatLandedAt[cheatId];
+    if (landedAt !== undefined && state.turnNumber - landedAt < QUICK_COUNTER_TURNS) {
+      earn(POINTS.quickCounter);
+      delete state.cheatLandedAt[cheatId]; // only once per cheat
+    }
+    state.ottoSays = say('cheatCountered');
+    if (state.round >= 2 && addFrustration(state, 8)) state.ottoSays = say('frustration');
+  }
+  if (checkRoundEnd()) return; // e.g. Glue Stick gave back a winning X
+  emit('change');
 }
 
 // --- Otto's turn -------------------------------------------------------------
@@ -119,6 +290,7 @@ function catchCheat() {
   addFrustration(state, 10);
   state.ottoSays = say('cheatCaught');
   state.notice = `CAUGHT! Otto was about to use ${cheat.name}.`;
+  earn(POINTS.catchCheat);
   emit('change');
   showStamp('CAUGHT!');
 
@@ -129,6 +301,8 @@ function runCheat(cheat) {
   cheat.apply(state);
   state.cooldowns[cheat.id] = cheat.cooldown;
   state.lastCheat = { id: cheat.id, turnNumber: state.turnNumber };
+  state.cheatLandedAt[cheat.id] = state.turnNumber;
+  if (cheat.id === 'boardSpin') state.spinsToUndo++;
   state.stats.cheatsUsed++;
   state.ottoSays = say('cheatSucceeds');
   state.notice = `Otto cheated: ${cheat.name}! ${cheat.description}`;
@@ -165,6 +339,7 @@ function checkRoundEnd() {
     state.winLine = winner.line;
     if (winner.mark === 'X') {
       state.score.player++;
+      earn(POINTS.winRound);
       addFrustration(state, 20);
       state.ottoSays = say('roundLost');
     } else {
@@ -182,6 +357,7 @@ function checkRoundEnd() {
 
   state.roundOver = true;
   state.telegraph = null;
+  state.mode = null;
   state.lightsOut = null; // lights back on so the player can see the result
 
   // Did someone just win the whole match?
@@ -233,6 +409,8 @@ function debugAction(action, value) {
     addFrustration(state, 25);
   } else if (action === 'calm') {
     addFrustration(state, -100);
+  } else if (action === 'points') {
+    earn(10);
   } else if (action === 'cooldowns') {
     state.cooldowns = {};
   }
@@ -241,8 +419,11 @@ function debugAction(action, value) {
 
 // --- Boot ------------------------------------------------------------------
 initRender(document.getElementById('app'), {
-  onCellClick: playerMove,
+  onCellClick: onCellClick,
   onCatch: catchCheat,
+  onPowerUp: activatePowerUp,
+  onOwnLineChoice: chooseOwnLine,
+  onCancel: cancelMode,
   onNextRound: () => startRound(state.round + 1),
   onPlayAgain: playAgain,
   onDebug: debugAction,

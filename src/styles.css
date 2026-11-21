@@ -1,5 +1,5 @@
 /* styles.css
-   Plain styling for Milestones 1-2. The full sticker-scrapbook art pass comes in Milestone 4. */
+   Plain styling for Milestones 1-3. The full sticker-scrapbook art pass comes in Milestone 4. */
 
 :root {
   --paper: #fbf6ea;
@@ -7,6 +7,8 @@
   --coral: #ff7a6b;
   --teal: #2ec4b6;
   --yellow: #ffd25a;
+  --sky: #6ec1f0;
+  --green: #7bc96f;
 }
 
 * { box-sizing: border-box; }
@@ -27,6 +29,7 @@ body {
 
 .hud {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
@@ -200,10 +203,111 @@ body {
 .debug-btn.armed { background: var(--yellow); }
 .debug-msg { font-weight: 800; }
 
+/* Points counter + floating "+3" pops */
+.points strong { font-family: 'Permanent Marker', cursive; font-size: 1.2rem; }
+.point-pop {
+  position: fixed;
+  z-index: 25;
+  transform: translate(-50%, 0);
+  padding: 2px 8px;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  background: var(--yellow);
+  font-family: 'Permanent Marker', cursive;
+  pointer-events: none;
+  animation: float-up 1.1s ease-out forwards;
+}
+@keyframes float-up {
+  from { transform: translate(-50%, 0); opacity: 1; }
+  to   { transform: translate(-50%, -48px); opacity: 0; }
+}
+
+/* Squares a power-up is waiting for you to click */
+.cell.target { background: #e3f3fc; box-shadow: inset 0 0 0 3px var(--sky); cursor: pointer; }
+.cell.glued { text-decoration: underline double var(--green); text-underline-offset: 6px; }
+
+/* Power-up tray (pinned to the bottom of the screen) */
+.tray {
+  position: sticky;
+  bottom: 0;
+  margin-top: 20px;
+  padding: 10px 0 12px;
+  background: var(--paper);
+  display: grid;
+  gap: 8px;
+}
+.tray-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.tray-choice { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.powerup {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ink);
+  font-family: 'Permanent Marker', cursive;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: 2px 3px 0 rgba(31, 29, 43, 0.18);
+}
+.powerup:nth-child(odd) { background: #dff1fb; }  /* sky blue */
+.powerup:nth-child(even) { background: #e4f4e1; } /* green */
+.powerup-name { padding: 0 12px; line-height: 1.1; font-size: 0.85rem; text-align: center; }
+.powerup-cost {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 0.8rem;
+  padding: 0 8px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--yellow);
+}
+.powerup-key {
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 800;
+  opacity: 0.6;
+}
+.powerup:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+.powerup.active { outline: 3px solid var(--teal); outline-offset: 2px; }
+/* Faded + "half-peeled": top-right corner folded down. */
+.powerup.faded {
+  opacity: 0.5;
+  cursor: not-allowed;
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+}
+.powerup.faded::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-left: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+  border-bottom-left-radius: 6px;
+}
+.btn.small { font-size: 0.95rem; padding: 6px 14px; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
 /* Respect reduced-motion: no wobble / spin / stamp bounce. */
 @media (prefers-reduced-motion: reduce) {
   .otto.telegraph .otto-face,
   .board.spin-in { animation: none; }
+  .point-pop { animation: fade-out 1.1s linear forwards; }
+  @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
   .stamp { animation: stamp-fade 1.6s linear forwards; }
   @keyframes stamp-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
   .darkness { transition-duration: 0.8s; }

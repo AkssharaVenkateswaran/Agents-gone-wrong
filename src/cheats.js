@@ -27,7 +27,7 @@ import {
   pickRandom,
 } from './board.js';
 
-const MAX_GRID_SIZE = 5;        // Extra Line won't grow the grid past 5x5
+export const MAX_GRID_SIZE = 5;        // Extra Line won't grow the grid past 5x5
 export const LIGHTS_OUT_TURNS = 3; // Lights Out lasts this many player turns
 
 export const CHEATS = [
@@ -110,12 +110,12 @@ export const CHEATS = [
     cooldown: 5,
     minFrustration: 25,
     replacesMove: true,
-    canUse: (state) => state.board.cells.includes('X'),
+    canUse: (state) => state.board.cells.some((mark, i) => mark === 'X' && !state.board.glued[i]),
     apply(state) {
       const board = state.board;
       const xSquares = [];
       board.cells.forEach((mark, i) => {
-        if (mark === 'X') xSquares.push(i);
+        if (mark === 'X' && !board.glued[i]) xSquares.push(i); // glued marks are safe
       });
 
       // Prefer a steal that wins Otto the game on the spot.

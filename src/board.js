@@ -1,19 +1,20 @@
 // board.js
 // The grid model, win detection, minimax, and helpers to grow / shrink / spin the grid.
 //
-// A board is a plain object: { rows, cols, cells, minions, stolen }
+// A board is a plain object: { rows, cols, cells, minions, stolen, glued }
 //   Every "layer" is a flat array with one entry per square (length rows * cols).
 //   The square at (row, col) is stored at index row * cols + col.
 //     cells[i]   -> null (empty), 'X' or 'O'
 //     minions[i] -> true if a minion sticker is sitting on that square (blocked)
 //     stolen[i]  -> true if Otto repainted the player's X into an O here
+//     glued[i]   -> true if the player glued their X here (Otto can't steal it)
 //   Keeping everything in parallel arrays means that when the grid grows or
 //   spins, ALL the information moves together and nothing gets out of sync.
 
 export const LINE_LENGTH = 3; // how many in a row you need to win
 
-const LAYERS = ['cells', 'minions', 'stolen'];
-const BLANK = { cells: null, minions: false, stolen: false }; // value of a fresh square
+const LAYERS = ['cells', 'minions', 'stolen', 'glued'];
+const BLANK = { cells: null, minions: false, stolen: false, glued: false }; // value of a fresh square
 
 export function createBoard(rows, cols) {
   const board = { rows, cols };

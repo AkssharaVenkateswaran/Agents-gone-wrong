@@ -55,3 +55,24 @@ export function pointTorchAt(element) {
 export function setLights(on) {
   ensureDarkness().classList.toggle('on', !on);
 }
+
+// --- Point pops ("+3") ----------------------------------------------------------
+// A small sticker that floats up from the points counter and fades away.
+let popsInFlight = 0; // spreads out pops that happen at the same time
+export function popPoints(amount) {
+  const counter = document.getElementById('points');
+  if (!counter) return;
+  const box = counter.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.className = 'point-pop';
+  pop.textContent = `+${amount}`;
+  pop.setAttribute('aria-hidden', 'true'); // the points counter itself is announced
+  pop.style.left = `${box.left + box.width / 2 + popsInFlight * 22}px`;
+  pop.style.top = `${box.top}px`;
+  document.body.appendChild(pop);
+  popsInFlight++;
+  setTimeout(() => {
+    pop.remove();
+    popsInFlight--;
+  }, 1100);
+}
