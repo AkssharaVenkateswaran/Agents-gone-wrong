@@ -532,7 +532,16 @@ async function ruleChangeScene() {
     if (picked.dataDriven) logReasoning(ruleReasoning(state.tactics, getRule(picked.ruleId)));
     termLog(state, ruleCommand(picked.ruleId), 'rule updated. good luck, human.');
     const typing = generation;
-    await performRuleRewrite(getRule(picked.ruleId).category, getRule(picked.ruleId).name, sfx.click);
+    const category = getRule(picked.ruleId).category;
+    await performRuleRewrite(category, getRule(change.oldId).name, getRule(picked.ruleId).name, (text, selected) => {
+      state.ruleTyping = { category, text, selected };
+      const el = document.querySelector(`.rule-row[data-category="${category}"] .rule-name`);
+      if (el) {
+        el.textContent = text;
+        el.classList.toggle('selected', selected);
+      }
+    }, sfx.click);
+    state.ruleTyping = null;
     if (typing !== generation) return false;
     sfx.rule();
   }
@@ -1251,8 +1260,29 @@ function debugAction(action, value) {
       setTempMood(value, 3000);
     }
     state.debug.message = `Otto's mood: ${value}`;
-  } else if (action === 'patienceUp' || action === 'patienceDown' || action === 'patienceOne') {
-    const next = { patienceUp: state.patience + 25, patienceDown: state.patience - 25, patienceOne: 1 }[action];
+  } else if (action === 'spawnMinion') {
+    spawnMinion();
+    state.debug.message = 'A minion is on its way (bonk it for +1).';
+  } else if (action === 'glitchBurst') {
+    glitchBurst({ force: true });
+    state.debug.message = 'Glitch burst at full strength.';
+  } else if (action === 'tvBurst') {
+    tvInterference('rule', 3, state.calm);
+    state.debug.message = 'TV static on the background (Meltdown strength).';
+  } else if (action === 'ottoDragToolbox') {
+    maybeSabotage('dragToolbox');
+    state.debug.message = "Otto's cursor drags TOOLBOX.EXE out of place.";
+  } else if (action === 'ottoRewriteRule') {
+    if (isPlayersTurn() && !state.ruleScene && !state.roundOver) {
+      ruleChangeScene(); // the cursor types the new rule into RULES.TXT, then NEW_RULE.EXE
+      state.debug.message = 'Otto rewrites a rule now.';
+    } else {
+      state.nextRuleAt = state.playerTurns + 1;
+      state.debug.message = 'Otto rewrites a rule at the start of your next turn.';
+    }
+  } else if (action === 'stage' || action === 'patienceUp' || action === 'patienceDown' || action === 'patienceOne') {
+    const stagePatience = [100, 70, 40, 10][Number(value)];
+    const next = { stage: stagePatience, patienceUp: state.patience + 25, patienceDown: state.patience - 25, patienceOne: 1 }[action];
     setPatience(state, Math.max(1, Math.min(100, next)));
     const now = stage();
     if (now > state.announcedStage) {

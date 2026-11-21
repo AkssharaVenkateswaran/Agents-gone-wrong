@@ -166,23 +166,25 @@ export async function performCheat(cheat, state, trial, clickSound) {
 }
 
 // --- Rule change: open RULES.TXT, select the old rule, delete it, type the new one ---------
-export async function performRuleRewrite(category, newName, clickSound) {
-  const row = document.querySelector(`.rule-row[data-category="${category}"]`);
-  const name = row?.querySelector('.rule-name');
-  if (!name) return;
-  await moveTo(name);
+// `show(text, selected)` keeps the half-typed text in the game state, so a redraw in
+// the middle of the typing shows it too (see render.js, state.ruleTyping).
+export async function performRuleRewrite(category, oldName, newName, show, clickSound) {
+  const nameEl = () => document.querySelector(`.rule-row[data-category="${category}"] .rule-name`);
+  if (!nameEl()) return;
+  show(oldName, false);
+  await moveTo(nameEl());
   await click(clickSound);
-  name.classList.add('selected'); // the old text is highlighted
+  show(oldName, true); // the old text is highlighted
   await wait(250);
-  let text = name.textContent;
+  let text = oldName;
   while (text.length > 0) {
     text = text.slice(0, -1);
-    name.textContent = text;
+    show(text, false);
     await wait(28);
   }
-  name.classList.remove('selected');
   for (const letter of newName) {
-    name.textContent += letter;
+    text += letter;
+    show(text, false);
     await wait(38);
   }
   await wait(200);

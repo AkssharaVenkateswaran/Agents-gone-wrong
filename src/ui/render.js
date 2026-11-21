@@ -796,7 +796,9 @@ function renderRules() {
            data-category="${category}" tabindex="0" aria-label="${CATEGORY_LABELS[category]}: ${rule.name}. ${rule.sentence}">
         <span class="rule-cat">${CATEGORY_LABELS[category]}</span>
         ${ruleIcon(rule.id)}
-        <span class="rule-name">${rule.name}</span>
+        ${state.ruleTyping?.category === category
+          ? `<span class="rule-name ${state.ruleTyping.selected ? 'selected' : ''}">${escapeHtml(state.ruleTyping.text)}</span>` // Otto is typing
+          : `<span class="rule-name">${rule.name}</span>`}
         ${pips}
         <span class="rule-tip" aria-hidden="true">${rule.sentence}</span>
       </div>`;
@@ -979,6 +981,12 @@ function renderDebug() {
     <details class="debug window" ${state.debug.open ? 'open' : ''}>
       <summary>DEBUG.EXE</summary>
       <div class="debug-body">
+        Agentic: <div class="debug-row">${[0, 1, 2, 3].map((n) => `<button class="debug-btn" data-debug="stage" data-value="${n}">Stage ${n}</button>`).join('')}
+          <button class="debug-btn" data-debug="spawnMinion">Spawn minion</button>
+          <button class="debug-btn" data-debug="glitchBurst">Force glitch burst</button>
+          <button class="debug-btn" data-debug="tvBurst">TV static burst</button>
+          <button class="debug-btn" data-debug="ottoDragToolbox">Otto: drag toolbox</button>
+          <button class="debug-btn" data-debug="ottoRewriteRule">Otto: rewrite rule</button></div>
         <div class="debug-row">
           <button class="debug-btn" data-debug="patienceUp">Patience +25</button>
           <button class="debug-btn" data-debug="patienceDown">Patience −25</button>

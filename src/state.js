@@ -119,6 +119,7 @@ export function freshRoundState(roundNumber) {
           stolenDisk: null, graffiti: [], unplugged: false }, // (the last 3: the roaming minions)
     roundBonks: 0,         // points earned from bonking roaming minions this round (max 5)
     lastSabotageTurn: -99, // Otto turn of the last sabotage (max once per 3 Otto turns)
+    ruleTyping: null,      // { category, text, selected } while Otto's cursor types a new rule
 
     // --- Power-ups in use ---
     mode: null,            // power-up waiting for a click: { type: 'flick' | 'ownLinePick' | 'ownLinePlace', cells? }
