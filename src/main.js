@@ -75,6 +75,7 @@ import {
 import { initRender, updateTurnTimer, ruleRowPosition } from './ui/render.js';
 import { performMove, performCheat, performTelegraph, performRuleRewrite, performSabotage } from './ui/performances.js';
 import { initOttoCursor, setCursorPatience, slap, park } from './ui/ottoCursor.js';
+import { initSwarm, clearSwarm, spawnMinion } from './ui/swarm.js';
 import {
   showPopup,
   spinBoardEffect,
@@ -719,6 +720,48 @@ function defaultDiskOrder() {
   return ['flick', 'lightSwitch', 'eraser', 'paperweight', 'glueStick', 'timeOut', 'myOwnLine', 'doubleMark', 'veto', 'amendment'];
 }
 
+// --- The roaming minion swarm (see ui/swarm.js) ------------------------------------------------
+const MAX_BONK_POINTS = 5; // per round
+
+function onBonk() {
+  if (state.roundBonks < MAX_BONK_POINTS) {
+    state.roundBonks++;
+    earn(1);
+  }
+  sfx.click();
+  emit('change');
+}
+
+function onMinionSteal(id) {
+  state.ui.stolenDisk = id;
+  emit('change');
+}
+
+function onMinionReturnDisk(id, dropped) {
+  if (state.ui.stolenDisk === id) state.ui.stolenDisk = null;
+  if (dropped) earn(1); // the player made it drop the disk
+  emit('change');
+}
+
+function onMinionGraffiti(doodle) {
+  state.ui.graffiti = [...state.ui.graffiti, doodle].slice(-4);
+  emit('change');
+}
+
+function onMinionUnplug() {
+  state.ui.unplugged = true;
+  state.notice = 'A minion pulled the monitor cable! Click the cable to plug it back in.';
+  emit('change');
+}
+
+// The player clicked the monitor cable: plugged back in.
+function plugIn() {
+  if (!state.ui.unplugged) return;
+  state.ui.unplugged = false;
+  sfx.click();
+  emit('change');
+}
+
 // The player clicked TOOLBOX.EXE's taskbar button: bring it back.
 function restoreToolbox() {
   state.ui.toolboxMinimised = false;
@@ -1085,6 +1128,7 @@ function playAgain() {
   rampageSkipped = false;
   restoreTab();
   clearFakePopups();
+  clearSwarm();
   resetMatch();
   setPatience(state, 100);
   state.ottoSays = say('matchStart');
@@ -1264,9 +1308,24 @@ initRender(document.getElementById('app'), {
   onMusic: toggleMusic,
   onSkip: skipRampage,
   onRestoreToolbox: restoreToolbox,
+  onPlugIn: plugIn,
   onDebug: debugAction,
 });
 initOttoCursor();
+initSwarm({
+  getInfo: () => ({
+    stage: stage(),
+    calm: state.calm,
+    active: state.screen === 'game' && !state.matchOver,
+    paused: !!state.ruleScene || state.roundOver,
+    rampage: state.rampage?.phase,
+  }),
+  onBonk,
+  onSteal: onMinionSteal,
+  onReturnDisk: onMinionReturnDisk,
+  onGraffiti: onMinionGraffiti,
+  onUnplug: onMinionUnplug,
+});
 initChaos(
   () => ({
     stage: stage(),

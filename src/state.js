@@ -115,7 +115,9 @@ export function freshRoundState(roundNumber) {
     spinsToUndo: 0,        // Board Spins that haven't been undone yet (Paperweight)
 
     // --- Otto's cosmetic interface sabotage (reset each round) ---
-    ui: { toolboxOffset: null, toolboxMinimised: false, diskOrder: null, bubbleDown: false },
+    ui: { toolboxOffset: null, toolboxMinimised: false, diskOrder: null, bubbleDown: false,
+          stolenDisk: null, graffiti: [], unplugged: false }, // (the last 3: the roaming minions)
+    roundBonks: 0,         // points earned from bonking roaming minions this round (max 5)
     lastSabotageTurn: -99, // Otto turn of the last sabotage (max once per 3 Otto turns)
 
     // --- Power-ups in use ---

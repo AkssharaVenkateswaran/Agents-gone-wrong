@@ -94,6 +94,7 @@ export function initRender(rootElement, callbacks) {
     if (t.closest('#music')) handlers.onMusic();
     if (t.closest('#skip')) handlers.onSkip();
     if (t.closest('#restore-toolbox')) handlers.onRestoreToolbox();
+    if (t.closest('#plug')) handlers.onPlugIn();
     const disk = t.closest('[data-powerup]');
     if (disk) {
       insertingDisk = disk.dataset.powerup;
@@ -426,6 +427,10 @@ function renderToolbox() {
     else if (!useful) why = ' Nothing to use it on right now.';
     // During the rampage the disks fly out in all directions.
     const fly = `--fx:${((n * 37) % 11) - 5}00px;--fy:${((n * 53) % 9) - 6}00px;--fr:${((n * 71) % 7) * 90 - 270}deg`;
+    if (state.ui.stolenDisk === p.id) {
+      // a minion is carrying this disk away (click the minion to get it back)
+      return `<div class="disk stolen-away" aria-label="${p.name}: a minion stole it! Click the minion to get it back.">?</div>`;
+    }
     return `
       <button class="disk ${greyed ? 'greyed' : ''} ${active ? 'active' : ''} ${insertingDisk === p.id ? 'inserting' : ''}"
               data-powerup="${p.id}" style="${fly}"
@@ -478,6 +483,7 @@ function renderCentre() {
   const { rows, cols } = state.board;
   const classes = ['monitor'];
   if (state.ruleScene || state.roundEnd) classes.push('dimmed');
+  if (state.ui.unplugged) classes.push('unplugged');
 
   // The monitor's motion (kept continuous across redraws, see since()):
   //   Irritated: a 1-2 degree nudge that settles on each Otto turn
@@ -516,6 +522,9 @@ function renderCentre() {
             <span class="power-led" aria-hidden="true"></span>
           </div>
           <div class="stand" aria-hidden="true"></div>
+          <button id="plug" class="cable ${state.ui.unplugged ? 'unplugged' : ''}"
+                  aria-label="${state.ui.unplugged ? 'The monitor cable is unplugged: click to plug it back in' : 'Monitor cable'}">
+            <i></i>${state.ui.unplugged ? '<span>PLUG IN</span>' : ''}</button>
         </div>
       </div>
       <p class="message-line" role="status">${state.notice || '&nbsp;'}</p>
@@ -809,6 +818,7 @@ function renderRules() {
 
   return `
     <section class="rules window" aria-label="Rules">
+      ${state.ui.graffiti.map((g) => `<span class="graffiti" aria-hidden="true" style="left:${g.x}%;top:${g.y}%">${escapeHtml(g.text)}</span>`).join('')}
       <svg class="rules-scribble" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
         <path d="${wobblyLine(5, 20, 95, 30, 7, 6, 6)} ${wobblyLine(8, 60, 92, 45, 9, 6, 6)} ${wobblyLine(10, 85, 90, 80, 13, 6, 6)}" />
       </svg>

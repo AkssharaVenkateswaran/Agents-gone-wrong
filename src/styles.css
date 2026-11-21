@@ -864,6 +864,53 @@ body.calm .extra { animation: none; }
   .rule-row { padding: 1px 4px; }
 }
 
+/* ==========================================================================
+   The roaming minion swarm (AGENTIC.md section 3)
+   ========================================================================== */
+.swarm-layer { position: fixed; inset: 0; z-index: 60; pointer-events: none; overflow: hidden; }
+.roamer {
+  position: absolute; left: 0; top: 0; padding: 0; border: 0; background: none; cursor: pointer;
+  pointer-events: auto; --px: 1; width: 16px; height: 16px; line-height: 0;
+}
+.roamer svg { width: 16px; height: 16px; }
+.roamer.walking svg { animation: waddle 0.3s steps(2) infinite; }
+@keyframes waddle { 50% { translate: 0 -2px; } }
+.roamer.job-chewer svg { animation: chomp 0.25s steps(2) infinite; }
+@keyframes chomp { 50% { scale: 1.1 0.9; } }
+.roamer.job-dancer svg { animation: dance 0.5s steps(2) infinite; }
+@keyframes dance { 0% { rotate: -12deg; } 50% { rotate: 12deg; translate: 0 -3px; } }
+.roamer.cheering svg { animation: dance 0.3s steps(2) infinite; }
+.roamer.falling { transition: translate 1.4s ease-in; translate: 0 110vh; }
+.roamer.bonked { pointer-events: none; animation: bonk 0.7s ease-in forwards; }
+@keyframes bonk { to { translate: 140px -220px; rotate: 720deg; opacity: 0; } }
+.roamer-carry { position: absolute; left: -6px; top: -14px; --px: 1; }
+.roamer-carry svg { width: 16px; height: 16px; }
+.roamer-sign:empty { display: none; }
+.roamer-sign {
+  position: absolute; left: 50%; bottom: 18px; translate: -50% 0; padding: 2px 4px; white-space: nowrap;
+  font: 16px/1 var(--text-font); color: var(--ink); background: var(--cream); border: 2px solid var(--ink);
+}
+.bite { position: fixed; width: 6px; height: 6px; background: var(--bg, #1b1e4b); pointer-events: none; }
+.disk.stolen-away {
+  display: grid; place-items: center; aspect-ratio: 1; font: 28px var(--pixel-font); color: var(--cream);
+  border: 3px dashed var(--plastic-shade); opacity: 0.6;
+}
+.graffiti {
+  position: absolute; translate: -50% -50%; rotate: -6deg; pointer-events: none; white-space: nowrap;
+  font: 18px/1 var(--text-font); color: var(--pink); opacity: 0.8;
+}
+/* the monitor cable (Unplugger): click it to plug it back in */
+.monitor { position: relative; }
+.cable { position: absolute; right: 12%; bottom: -16px; width: 26px; height: 30px; padding: 0; border: 0; background: none; cursor: pointer; }
+.cable i { position: absolute; left: 10px; top: 0; width: 6px; height: 100%; background: var(--ink); }
+.cable.unplugged i { height: 45%; rotate: 30deg; transform-origin: top; }
+.cable span {
+  position: absolute; right: 30px; bottom: 0; padding: 2px 4px; white-space: nowrap;
+  font: 16px/1 var(--text-font); color: var(--ink); background: var(--yellow); border: 2px solid var(--ink);
+  animation: blink 1s steps(1) infinite;
+}
+.monitor.unplugged .screen { filter: brightness(0.7); }  /* dims 30%: still readable and clickable */
+
 /* --- Reduced motion: nothing drifts, bounces, spins or flies. --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .drift, .dots i, .otto-face.think .f1, .otto-face.think .f2, .otto-face.flicker,
@@ -876,6 +923,9 @@ body.calm .extra { animation: none; }
   .confetti { display: none; }
   .extra, .wipe-new { animation: none; }
   .term-cmd.typing { animation: none; max-width: 100%; }
+  .roamer svg, .roamer.walking svg { animation: none; }
+  .roamer.bonked { animation: none; opacity: 0; }
+  .cable span { animation: none; }
   .term-result.waiting { animation: none; visibility: visible; }
   .monitor { animation: none !important; transition: none; }  /* static tilt only */
   .bubble.jitter, .sparks i, .static-band, .fall, .rampage-chaos .disk, .rampage-chaos .rules, .shards i { animation: none !important; }
