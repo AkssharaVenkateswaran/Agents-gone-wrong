@@ -109,7 +109,7 @@ export const lines = {
     "I've been reading the rules... I don't like them.",
     "Hold on. I'm making some... edits.",
     "Page 1, rule 1: Otto makes the rules. Let me check... yep.",
-    "These rules are SO 1952. Time for an update.",
+    "These rules are SO last century. Time for an update.",
     "Hmm, what if the rules were... worse? For you.",
   ],
   vetoed: [

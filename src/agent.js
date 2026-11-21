@@ -28,7 +28,8 @@ export function pickCheat(state) {
     return null;
   }
 
-  if (state.era !== 'modern') return null; // the 1952 opening is played fair
+  if (state.stats.rulesChanged === 0) return null; // classic tic-tac-toe is played fair
+  if (state.ottoGrace) return null;              // no cheating right after a rule change
 
   // No need to cheat if a normal move already wins.
   if (findWinningSquare(state, 'O') !== -1) return null;
@@ -65,6 +66,6 @@ export function tickCooldowns(state) {
 export function ottoMood(state) {
   if (state.telegraph) return 'scheming';
   if (state.frustration >= 70) return 'furious';
-  if (state.era === 'modern' && state.frustration < 35) return 'bored';
+  if (state.stats.rulesChanged > 0 && state.frustration < 35) return 'bored';
   return 'smug';
 }

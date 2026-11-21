@@ -22,8 +22,8 @@ import {
   emptyCells,
   pickRandom,
 } from './board.js';
-import { MAX_BOARD, putMark, placeMove, lineFor, vetoNewest, drawRules } from './rules.js';
-import { ottoMove, bestSquareAmong, findWinningSquare, ottoRewriteRules } from './ai.js';
+import { MAX_BOARD, MIN_RULE_GAP, putMark, placeMove, lineFor, vetoNewest, drawRules } from './rules.js';
+import { ottoMove, bestSquareAmong, findWinningSquare } from './ai.js';
 
 export const MAX_GRID_SIZE = MAX_BOARD; // Extra Line won't grow the grid past 9x9
 export const LIGHTS_OUT_TURNS = 3; // Lights Out lasts this many player turns
@@ -132,6 +132,7 @@ export const CHEATS = [
 
       board.cells[target] = 'O';
       board.stolen[target] = true;
+      board.stamp[target] = ++state.moveCount; // counts as a fresh mark for winning lines
     },
     undo(state) {
       const board = state.board;
@@ -186,17 +187,21 @@ export const CHEATS = [
   },
 
   // ---------------------------------------------------------------------
-  // Otto changes a rule early, without waiting for the usual 4 turns.
+  // Otto moves the next rule change forward to the start of your next turn.
+  // (Never sooner than MIN_RULE_GAP turns after the last change.)
   {
     id: 'rewriteRules',
     name: 'Rewrite the Rules',
-    description: 'Otto rewrote a rule early. Check the Rule Book!',
+    description: 'The rules will change at the start of your turn!',
     cooldown: 6,
     minFrustration: 50,
     replacesMove: false,
-    canUse: (state) => state.era === 'modern' && drawRules(state).length > 0,
+    canUse: (state) =>
+      state.playerTurns - state.lastRuleChangeTurn >= MIN_RULE_GAP &&
+      state.nextRuleAt > state.playerTurns &&
+      drawRules(state).length > 0,
     apply(state) {
-      ottoRewriteRules(state); // stores the change in state.lastRuleChange
+      state.nextRuleAt = state.playerTurns; // the change happens when your turn starts
     },
     undo(state) {
       vetoNewest(state); // the counter is Veto

@@ -2,42 +2,49 @@
 // One single object holds everything about the current game.
 // Other modules read it and change it, then call emit('change') so the UI redraws.
 //
-// The whole match is ONE long round. It starts as classic 3x3 tic-tac-toe
-// (shown in the 1952 style), then Otto starts rewriting the rules.
+// The whole match is ONE long round. It starts as classic 3x3 tic-tac-toe,
+// then Otto starts rewriting the rules.
 
 import { createBoard } from './board.js';
 import { STARTING_POINTS } from './scoring.js';
-import { defaultRules } from './rules.js';
+import { defaultRules, FIRST_RULE_AT } from './rules.js';
 
-export const MAX_TURNS = 30;   // after 30 player turns the FINAL RULE decides the winner
-export const RULE_EVERY = 4;   // Otto rewrites a rule every 4 player turns
+export const MAX_TURNS = 30; // after 30 player turns the FINAL RULE decides the winner
 
 export const state = {
   screen: 'title',         // 'title' (enter your name) or 'game'
-  playerName: '',          // shown to Otto's memory (max 20 characters)
-  era: '1952',             // '1952' = the opening, styled like OXO on the EDSAC; 'modern' = sticker scrapbook
-  transitioning: false,    // true while the 1952 screen glitches and peels away (input is blocked)
+  playerName: '',          // sent to Otto's memory (max 20 characters)
+  session: { you: 0, otto: 0 }, // matches won since the page loaded (top bar score)
+  muted: false,            // sound effects on/off
+
   board: createBoard(3, 3),
   turn: 'X',               // whose turn it is: 'X' (player) or 'O' (Otto)
   playerTurns: 0,          // how many turns the player has finished
   turnNumber: 0,           // counts Otto's turns (for cheat cooldowns)
+  moveCount: 0,            // counts every mark ever placed (see board.stamp)
+  ottoThinking: false,     // true while Otto "thinks" before moving
   matchOver: false,
   result: null,            // 'X', 'O' or 'draw' once the match is over
+  ending: null,            // end-of-match sequence: 'crash' -> 'flip' -> 'banner'
   winLine: null,           // squares of the winning line(s), for highlighting
   finalRule: null,         // { x, o } line counts if the FINAL RULE decided the match
   ottoSays: '',            // text in Otto's speech bubble
-  notice: '',              // short line under the board explaining what just happened
+  notice: '',              // the ONE message line under the monitor
 
   // --- Rules (Otto keeps rewriting them) ---
   rules: defaultRules(),   // the active rule in each category: { win, placement, twist }
-  ruleHistory: [],         // replaced / vetoed / expired rules (shown crossed out)
-  newestCategory: null,    // category of the newest rule (gets the NEW! label; Veto targets it)
-  lastRuleChange: null,    // { ruleId, rejected, by } — the latest change, for the Rule Book
-  lastRuleChangeTurn: -99, // playerTurns when a rule last changed (for the +3 bonus)
-  nextRuleAt: RULE_EVERY,  // Otto's next scheduled rewrite happens after this many player turns
-  ruleTelegraph: false,    // true while the Rule Book shakes before a change
-  highlight: null,         // squares lit up for 2 seconds after a rule change
-  turnDeadline: null,      // when the 5-second timer runs out (a Date.now() time)
+  ruleHistory: [],         // replaced / vetoed / expired rules
+  newestCategory: null,    // category of the newest rule (Veto targets it)
+  lastRuleChange: null,    // { ruleId, rejected, by } — the latest change
+  lastRuleChangeTurn: 0,   // playerTurns when a rule last changed
+  ruleChangeStamp: 0,      // moveCount at the last rule change (older lines don't count)
+  ottoGrace: false,        // Otto's next move can't win and it can't cheat (after a rule change)
+  nextRuleAt: FIRST_RULE_AT, // the rules change when playerTurns reaches this
+  amendmentPending: false, // Amendment bought: the player picks the next rule
+  ruleScene: null,         // the NEW_RULE.EXE pop-up while a rule changes (inputs locked)
+  blinkCategory: null,     // the Rule Book row that just got a new rule (blinks twice)
+  highlight: null,         // squares showing an example of a new rule for 2 seconds
+  turnDeadline: null,      // when the turn timer runs out (a Date.now() time)
 
   // --- Cheating ---
   frustration: 0,          // 0-100. Higher = Otto cheats more often and nastier
@@ -53,8 +60,7 @@ export const state = {
 
   // --- Points & power-ups ---
   points: STARTING_POINTS,
-  mode: null,              // power-up waiting for a click:
-                           //   { type: 'flick' | 'ownLinePick' | 'ownLinePlace' | 'amend', cells?, cards? }
+  mode: null,              // power-up waiting for a click: { type: 'flick' | 'ownLinePick' | 'ownLinePlace', cells? }
   extraMarks: 0,           // Double Mark: extra X marks left to place this turn
 
   stats: newStats(),
@@ -80,17 +86,18 @@ function newStats() {
   return { cheatsUsed: 0, cheatsCaught: 0, powerUpsUsed: 0, pointsEarned: 0, rulesChanged: 0 };
 }
 
-// Reset everything for a brand-new match.
+// Reset everything for a brand-new match (the session score and name stay).
 export function resetMatch() {
   Object.assign(state, {
-    era: '1952',
-    transitioning: false,
     board: createBoard(3, 3),
     turn: 'X',             // the player always moves first
     playerTurns: 0,
     turnNumber: 0,
+    moveCount: 0,
+    ottoThinking: false,
     matchOver: false,
     result: null,
+    ending: null,
     winLine: null,
     finalRule: null,
     notice: '',
@@ -98,9 +105,13 @@ export function resetMatch() {
     ruleHistory: [],
     newestCategory: null,
     lastRuleChange: null,
-    lastRuleChangeTurn: -99,
-    nextRuleAt: RULE_EVERY,
-    ruleTelegraph: false,
+    lastRuleChangeTurn: 0,
+    ruleChangeStamp: 0,
+    ottoGrace: false,
+    nextRuleAt: FIRST_RULE_AT,
+    amendmentPending: false,
+    ruleScene: null,
+    blinkCategory: null,
     highlight: null,
     turnDeadline: null,
     frustration: 0,

@@ -17,12 +17,16 @@ import {
   addColumn,
   emptyCells,
   isPlayable,
-  findLine,
+  allLines,
   ALL_DIRECTIONS,
   pickRandom,
 } from './board.js';
 
 export const MAX_BOARD = 9;        // the board can grow up to 9x9
+export const TIMER_SECONDS = 10;    // the "turn timer" twist
+export const RULE_EVERY = 6;        // Otto's scheduled rule change: every 6 player turns...
+export const FIRST_RULE_AT = 5;     // ...starting after the player's 5th turn
+export const MIN_RULE_GAP = 5;      // never more than one change per 5 player turns
 export const REVERSE_DAY_TURNS = 3; // Reverse day only lasts this many turns
 export const FADE_AFTER_TURNS = 6;  // "Fading ink": marks older than this disappear
 
@@ -39,7 +43,7 @@ export const RULES = [
   // Win condition
   {
     id: 'three', category: 'win', isDefault: true,
-    name: '3 in a row', sentence: 'Get 3 in a row (across, down or diagonal) to win.',
+    name: '3 in a row', sentence: '3 in a row in any direction wins.',
     settings: () => ({ length: 3, dirs: 'all' }),
   },
   {
@@ -56,13 +60,13 @@ export const RULES = [
   },
   {
     id: 'noDiagonals', category: 'win',
-    name: "Diagonals don't count", sentence: 'Only lines going across or down count.',
+    name: "Diagonals don't count", sentence: 'Only lines across or down win.',
     available: (state) => winSettings(state).dirs !== 'straight',
     settings: (current) => ({ length: current.length, dirs: 'straight' }),
   },
   {
     id: 'onlyDiagonals', category: 'win',
-    name: 'ONLY diagonals count', sentence: 'Only diagonal lines count. Across and down do nothing.',
+    name: 'Only diagonals count', sentence: 'Only diagonal lines win now.',
     available: (state) => winSettings(state).dirs !== 'diagonal',
     settings: (current) => ({ length: current.length, dirs: 'diagonal' }),
   },
@@ -78,17 +82,17 @@ export const RULES = [
   },
   {
     id: 'lava', category: 'placement',
-    name: 'Corners are lava', sentence: "Nobody can play in the four corner squares.",
+    name: 'Corners are lava', sentence: 'Nobody can play in the 4 corners.',
   },
   {
     id: 'touch', category: 'placement',
-    name: 'Must touch', sentence: 'New marks must touch an existing mark (diagonally counts).',
+    name: 'Must touch', sentence: 'New marks must touch a mark (diagonals too).',
   },
 
   // Twist
   {
     id: 'noTwist', category: 'twist', isDefault: true,
-    name: 'No twist', sentence: 'Nothing weird is happening. Yet.',
+    name: 'None', sentence: 'No twist right now. Yet.',
   },
   {
     id: 'fade', category: 'twist',
@@ -96,11 +100,11 @@ export const RULES = [
   },
   {
     id: 'mirror', category: 'twist',
-    name: 'Mirror', sentence: 'Every move is copied to the mirrored square (left ↔ right) if it is empty.',
+    name: 'Mirror', sentence: 'Every move is copied left ↔ right.',
   },
   {
     id: 'timer', category: 'twist',
-    name: '5-second timer', sentence: 'You get 5 seconds per turn, or you lose the turn.',
+    name: '10-second timer', sentence: `${TIMER_SECONDS} seconds per turn, or you lose it.`,
   },
   {
     id: 'reverse', category: 'twist',
@@ -185,9 +189,18 @@ export function activateRule(state, ruleId) {
 
   state.ruleHistory.unshift({ entry: old, endedTurn: currentTurn(state), how: 'replaced' });
   state.rules[category] = entry;
-  state.newestCategory = category;           // shows the NEW! label; Veto targets this
+  state.newestCategory = category;           // marks the new rule; Veto targets this
   state.lastRuleChangeTurn = state.playerTurns;
   state.stats.rulesChanged++;
+  afterRuleChange(state);
+}
+
+// Every rule change (new rule, Veto, a twist running out) is made fair:
+//  - lines already on the board don't suddenly count (wins need a NEW mark)
+//  - Otto gets a "grace turn": its next move can't win, and it can't cheat
+function afterRuleChange(state) {
+  state.ruleChangeStamp = state.moveCount;
+  state.ottoGrace = true;
   ensureBoardFits(state);
 }
 
@@ -213,7 +226,7 @@ export function restorePrevious(state, category, how) {
   // ...and cross out the rule we're removing.
   state.ruleHistory.unshift({ entry, endedTurn: currentTurn(state), how });
   state.rules[category] = previous;
-  ensureBoardFits(state);
+  afterRuleChange(state);
 }
 
 // Reverse day only lasts a few turns. Returns true if it just ended.
@@ -315,7 +328,9 @@ export function mirrorSquare(board, i) {
 
 // Put a single mark on a square, remembering when it was placed.
 export function putMark(state, i, mark) {
+  state.moveCount++;
   state.board.cells[i] = mark;
+  state.board.stamp[i] = state.moveCount;
   state.board.age[i] = state.playerTurns;
   state.board.stolen[i] = false;
   state.board.glued[i] = false;
@@ -360,9 +375,16 @@ export function markAge(state, i) {
 }
 
 // Does `mark` have a winning line under the CURRENT win rule? { mark, line } or null.
+// Only lines with at least one mark placed since the last rule change count, so a
+// new rule can never hand someone an instant win from marks already on the board.
 export function lineFor(state, mark) {
   const { length, dirs } = winSettings(state);
-  return findLine(state.board, mark, length, DIRECTION_SETS[dirs]);
+  const { cells, stamp } = state.board;
+  for (const line of allLines(state.board, length, DIRECTION_SETS[dirs])) {
+    if (!line.every((i) => cells[i] === mark)) continue;
+    if (line.some((i) => stamp[i] > state.ruleChangeStamp)) return { mark, line };
+  }
+  return null;
 }
 
 export function winDirections(state) {
@@ -421,3 +443,36 @@ export function affectedSquares(state, ruleId) {
       return [];
   }
 }
+
+// --- Showing the rules ------------------------------------------------------------------
+
+// The big banner at the top of the monitor, e.g. "WIN: 4 IN A ROW".
+export function winBanner(state) {
+  if (isReverseDay(state)) return 'REVERSE DAY: A LINE LOSES!';
+  const { length, dirs } = winSettings(state);
+  if (dirs === 'straight') return `WIN: ${length} ACROSS OR DOWN`;
+  if (dirs === 'diagonal') return `WIN: ${length} DIAGONALLY`;
+  return `WIN: ${length} IN A ROW`;
+}
+
+// A tiny diagram for each rule, shown on the NEW_RULE.EXE pop-up.
+// One letter per square:
+//   . empty   X / O marks   x a mark that is part of a winning line
+//   N a line that does NOT count   L lava   v falls down   t a square you may use
+//   f a fading mark
+export const RULE_DIAGRAMS = {
+  three: ['....', 'xxx.', '.O..', 'O...'],
+  four: ['....', 'xxxx', '.O..', 'O.O.'],
+  five: ['.....', 'xxxxx', '.O.O.', '..O..'],
+  noDiagonals: ['N...', '.N..', '..N.', 'xxx.'],
+  onlyDiagonals: ['x...', '.x..', '..x.', 'NNN.'],
+  anywhere: ['t.t.', '.tXt', 't.t.', '.t.t'],
+  gravity: ['..v.', '..v.', '..v.', 'OXX.'],
+  lava: ['L..L', '....', '....', 'L..L'],
+  touch: ['....', '.ttt', '.tXt', '.ttt'],
+  noTwist: ['....', '.X..', '..O.', '....'],
+  fade: ['X..f', '.O..', '..X.', 'f...'],
+  mirror: ['x..x', '.O..', '..O.', 'X..X'],
+  timer: ['X...', '.O..', '..t.', '....'],
+  reverse: ['....', 'NNN.', '.O..', '....'],
+};

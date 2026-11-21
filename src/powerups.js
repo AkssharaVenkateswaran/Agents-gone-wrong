@@ -1,7 +1,7 @@
 // powerups.js
 // The player's power-ups, bought with points. Each power-up is an object:
 //   id        - short name used in code
-//   name      - name shown on the sticker button
+//   name      - name shown on the floppy disk
 //   cost      - points it costs
 //   key       - keyboard shortcut (1-9, then 0)
 //   counters  - id of the cheat it counters (or null)
@@ -13,7 +13,7 @@
 
 import { addRow, addColumn, lineCells } from './board.js';
 import { getCheat, MAX_GRID_SIZE } from './cheats.js';
-import { vetoNewest, activateRule, drawRules } from './rules.js';
+import { vetoNewest, drawRules } from './rules.js';
 
 export const POWERUPS = [
   {
@@ -143,9 +143,9 @@ export const POWERUPS = [
     key: '0',
     counters: null,
     help: 'You pick the next rule from 3 cards instead of Otto.',
-    canUse: (state) => state.era === 'modern' && drawRules(state).length > 0,
-    apply(state, ruleId) {
-      activateRule(state, ruleId);
+    canUse: (state) => !state.amendmentPending && drawRules(state).length > 0,
+    apply(state) {
+      state.amendmentPending = true; // at the next rule change, the player chooses
     },
   },
 ];

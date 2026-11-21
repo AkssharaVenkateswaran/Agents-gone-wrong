@@ -1,14 +1,16 @@
 // board.js
 // The grid model, win detection, minimax, and helpers to grow / shrink / spin the grid.
 //
-// A board is a plain object: { rows, cols, cells, minions, stolen, glued, age }
+// A board is a plain object: { rows, cols, cells, minions, stolen, glued, age, stamp }
 //   Every "layer" is a flat array with one entry per square (length rows * cols).
 //   The square at (row, col) is stored at index row * cols + col.
 //     cells[i]   -> null (empty), 'X' or 'O'
-//     minions[i] -> true if a minion sticker is sitting on that square (blocked)
+//     minions[i] -> true if a minion robot is sitting on that square (blocked)
 //     stolen[i]  -> true if Otto repainted the player's X into an O here
 //     glued[i]   -> true if the player glued their X here (Otto can't steal it)
 //     age[i]     -> the player-turn number when the mark here was placed (for "fading ink")
+//     stamp[i]   -> the move number when the mark here was placed (lines only count if
+//                   they include a mark placed AFTER the last rule change)
 //   Keeping everything in parallel arrays means that when the grid grows or
 //   spins, ALL the information moves together and nothing gets out of sync.
 
@@ -23,8 +25,8 @@ export const DIRECTIONS = {
 };
 export const ALL_DIRECTIONS = ['h', 'v', 'd1', 'd2'];
 
-const LAYERS = ['cells', 'minions', 'stolen', 'glued', 'age'];
-const BLANK = { cells: null, minions: false, stolen: false, glued: false, age: null }; // value of a fresh square
+const LAYERS = ['cells', 'minions', 'stolen', 'glued', 'age', 'stamp'];
+const BLANK = { cells: null, minions: false, stolen: false, glued: false, age: null, stamp: 0 }; // value of a fresh square
 
 export function createBoard(rows, cols) {
   const board = { rows, cols };

@@ -5,8 +5,8 @@ Tic-tac-toe is a solved game: with perfect play, every game is a draw. The oppon
 
 ## Tech
 - Vite + vanilla JavaScript (ES modules), HTML, CSS. No frontend framework, no game engine.
-- **All art is inline SVG drawn in code** — no external image files.
-- Google Fonts: **"Permanent Marker"** (headings, buttons) and **"Nunito"** (body text).
+- **All art is pixel sprites drawn in code** (see Art direction) — no external image files.
+- Google Fonts: **"Press Start 2P"** (title, score, headings, buttons) and **"VT323"** (all other text).
 - Optional sound effects using the Web Audio API (simple synthesised pops, scribbles, stamps) — no audio files.
 - Must run with `npm install && npm run dev`, and build to static files with `npm run build`.
 
@@ -92,24 +92,35 @@ Smug, petty, theatrical and funny — never cruel. Speaks in sticker speech bubb
    - Bottom: the power-up tray
 3. **End screen:** stamp, a summary (cheats caught, power-ups used, points earned), Play Again.
 
-## Art direction (follow exactly)
-Hand-drawn **"sticker scrapbook"** style:
-- Every object is a **chunky, simplified illustration** in a slight **2.5D oblique view** (top and front faces visible, not true isometric).
-- **Thick dark-ink outline**, about 2–3px, near-black `#1F1D2B`.
-- **Flat colour fills** with **one soft shade on the side faces**.
-- A **white die-cut sticker border** around each object (e.g. a duplicate shape behind it with a thick white stroke) and a **subtle drop shadow** (`filter: drop-shadow(2px 3px 0 rgba(31,29,43,0.18))`), so it looks peeled off a sticker sheet and placed on the page.
-- **Background:** cream graph paper `#FBF6EA` with faint blue grid lines `#CFE3F5`, like a maker's notebook.
-- **UI panels:** white cards with rounded corners (~16px), dark outlines, soft offset shadows.
-- **Labels** sit on strips of **pastel washi tape** (semi-transparent, slightly rotated, torn/zigzag ends via `clip-path`).
-- **Success moments** use a **rubber-stamp effect** (rotated ~−8°, patchy uneven ink texture, slams in with a small scale bounce).
-- **Palette:** cream paper `#FBF6EA`, near-black ink `#1F1D2B`, coral pink `#FF7A6B`, sunny yellow `#FFD25A`, teal `#2EC4B6`, sky blue `#6EC1F0`, grass green `#7BC96F` — used as **accents, not everywhere**. Suggested mapping: player X = teal, Otto's O = coral, minions = yellow, power-ups = sky blue / green.
-- **Fonts:** "Permanent Marker" for headings and buttons; "Nunito" for body text.
-- Keep shapes rounded, details minimal, and the feel **tactile, cheerful and unintimidating** — like a beginner's craft journal, not a technical diagram.
-- **No gradients, photorealism, glossy 3D or harsh neon.** (Only exception: the Lights Out torch may use a radial mask.)
-- **Otto:** a chunky, rounded robot sticker with a big expressive face and at least 4 expressions (smug, bored, scheming, furious) that change with game state.
-- **Minion agents:** small, round, mini versions of Otto.
-- **Hand-drawn grid lines:** slightly wobbly marker strokes (SVG paths with small random offsets), not perfectly straight. Otto's added lines look scribbly and coral; the player's added lines are neat and teal.
-- **Motion:** stickers "peel and place" when they appear (quick scale + rotate), wobble gently when idle. Respect `prefers-reduced-motion` (disable wobble/shake).
+## Art direction: retro pixel art
+**Mood:** a cosy 90s computer desk at night: chunky CRT monitors, floppy disks, old operating-system windows, pixel cursors and neon accents. Bright, playful and readable, not dark and gloomy.
+
+**Palette** (use only these):
+- Background: deep indigo `#2B1B5A`, with a purple wall `#6B5BA8` and navy `#1B2A6B` for areas
+- Outlines: `#140A2E`, used for all pixel outlines
+- CRT screen: `#0E1A2B`, phosphor glow text `#C9F6A7`
+- Monitor plastic: `#C8C2E8`, shade `#8E86C4`
+- Accents: neon pink `#FF4F9A`, lime `#9BE564`, sunny yellow `#FFE45C`, sky cyan `#5CD6FF`, cream `#F4EBD0`
+- Player X = lime `#9BE564`. Otto's O = neon pink `#FF4F9A`.
+
+**Pixel rules:**
+- All art is pixel sprites drawn on small grids (16×16 or 32×32), defined in code as arrays of strings (e.g. `"..##..##.."`) with a palette map, rendered as SVG `<rect>`s with `shape-rendering="crispEdges"` (or to a canvas), and scaled up by whole numbers only (×3, ×4). Add `image-rendering: pixelated` everywhere.
+- Every sprite has a 1-pixel dark outline and one darker shade on its bottom and right side.
+- Shadows are hard pixel offsets (e.g. `6px 6px 0 #140A2E`), never blurred. The only soft effect allowed is a subtle glow on CRT screen text.
+- Corners are stepped pixel corners (using `clip-path` or pixel border sprites), not smooth rounded corners.
+- Use a 2×2 checkerboard dither pattern (a data-URI background) for shading large areas.
+
+**Fonts** (Google Fonts):
+- "Press Start 2P": title, score, headings and buttons only. Keep it small (12–20px) because it's very wide.
+- "VT323": all other text (18–26px, so it stays readable).
+
+**Retro UI kit:**
+- Panels are old operating-system windows: a navy title bar `#1B2A6B` with a pixel title (e.g. `RULES.TXT`, `TOOLBOX.EXE`), little `_ □ ×` buttons (decorative), a cream or white body, a chunky 3px pixel outline and a hard shadow.
+- Buttons are chunky pixel buttons that visibly press down 3px when clicked.
+- The cursor is a custom pixel hand cursor (a data-URI SVG), and a pixel pointing hand when hovering over clickable things.
+- Speech bubbles are pixel bubbles in sunny yellow with an indigo outline and a stepped tail.
+
+**Background:** a purple or indigo wall with a few slowly drifting pixel floppy disks and binary digits (`0 1`) in lime, low opacity. A desk strip runs along the bottom. Turn the drifting off when `prefers-reduced-motion` is set.
 
 ## Accessibility
 - Board is keyboard-playable (arrow keys + Enter; number keys 1–8 for power-ups).

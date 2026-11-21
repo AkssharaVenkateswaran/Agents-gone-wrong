@@ -63,10 +63,18 @@ function squareScore(state, i, mark) {
 
 // Otto's normal move: returns the square its mark lands on.
 export function ottoMove(state) {
-  if (isClassic(state)) return bestMove(state.board, 'O'); // perfect play on classic 3x3
+  // Perfect play on classic 3x3 (but not during a grace turn, see below).
+  if (isClassic(state) && !state.ottoGrace) return bestMove(state.board, 'O');
 
-  const moves = legalSquares(state);
+  let moves = legalSquares(state);
   if (moves.length === 0) return undefined;
+
+  // Grace turn: right after a rule change Otto is not allowed to win, so the
+  // player always gets one move under the new rule first.
+  if (state.ottoGrace) {
+    const safe = moves.filter((i) => !makesLine(state, i, 'O'));
+    if (safe.length > 0) moves = safe;
+  }
 
   if (isReverseDay(state)) {
     // Making a line LOSES today: avoid it, and stay away from our own marks.
