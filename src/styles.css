@@ -1,5 +1,5 @@
 /* styles.css
-   Plain styling for Milestone 1. The full sticker-scrapbook art pass comes in Milestone 4. */
+   Plain styling for Milestones 1-2. The full sticker-scrapbook art pass comes in Milestone 4. */
 
 :root {
   --paper: #fbf6ea;
@@ -46,8 +46,22 @@ body {
   margin-top: 20px;
 }
 
-.otto { display: flex; align-items: center; gap: 12px; width: 100%; }
-.otto-face { font-size: 3rem; }
+.otto-area { display: flex; align-items: center; gap: 12px; width: 100%; }
+.otto {
+  background: none;
+  border: none;
+  padding: 4px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.otto:focus-visible { outline: 3px solid var(--teal); }
+.otto-face { display: inline-block; font-size: 3rem; }
+/* Telegraph: Otto wobbles while scheming. */
+.otto.telegraph .otto-face { animation: wobble 0.35s ease-in-out infinite alternate; }
+@keyframes wobble {
+  from { transform: rotate(-10deg) scale(1.05); }
+  to   { transform: rotate(10deg) scale(1.05); }
+}
 .bubble {
   flex: 1;
   min-height: 3em;
@@ -81,7 +95,119 @@ body {
 .cell.mark-O { color: #d9483a; } /* darker coral for contrast on cream */
 .cell.win { background: var(--yellow); }
 
-.status { margin: 0; font-weight: 800; font-size: 1.1rem; }
+.status { margin: 0; font-weight: 800; font-size: 1.1rem; text-align: center; }
+.notice { margin: 0; text-align: center; max-width: 360px; }
+
+/* Lines Otto added are coral and dashed; lines the player adds (Milestone 3) are teal. */
+.cell.line-O { box-shadow: inset 0 0 0 3px var(--coral); }
+.cell.line-X { box-shadow: inset 0 0 0 3px var(--teal); }
+.cell.stolen { text-decoration: underline wavy var(--coral); text-underline-offset: 6px; }
+
+.minion {
+  display: inline-grid;
+  place-items: center;
+  width: 70%;
+  aspect-ratio: 1;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--yellow);
+  color: var(--ink);
+  font-family: 'Nunito', sans-serif;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+/* Frustration meter */
+.frustration { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; }
+.meter {
+  width: 80px;
+  height: 12px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+.meter-fill { height: 100%; background: var(--coral); transition: width 0.4s ease; }
+
+/* Board Spin: the board turns into place. */
+.board.spin-in { animation: spin-in 0.5s ease-out; }
+@keyframes spin-in {
+  from { transform: rotate(-90deg); }
+  to   { transform: rotate(0deg); }
+}
+
+/* "CAUGHT!" rubber stamp (full patchy-ink version in Milestone 4). */
+.stamp {
+  position: fixed;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-8deg);
+  padding: 8px 20px;
+  border: 5px solid #d9483a;
+  border-radius: 10px;
+  color: #d9483a;
+  background: rgba(251, 246, 234, 0.85);
+  font-family: 'Permanent Marker', cursive;
+  font-size: 3rem;
+  pointer-events: none;
+  z-index: 20;
+  animation: stamp-in 1.6s ease-out forwards;
+}
+@keyframes stamp-in {
+  0%   { transform: translate(-50%, -50%) rotate(-8deg) scale(1.6); opacity: 0; }
+  15%  { transform: translate(-50%, -50%) rotate(-8deg) scale(0.95); opacity: 1; }
+  25%  { transform: translate(-50%, -50%) rotate(-8deg) scale(1); }
+  80%  { opacity: 1; }
+  100% { transform: translate(-50%, -50%) rotate(-8deg) scale(1); opacity: 0; }
+}
+
+/* Lights Out: a dark layer with a see-through torch circle at the cursor.
+   It fades smoothly (opacity transition) — no flashing. */
+.darkness {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none; /* clicks go straight through to the board */
+  background: rgba(15, 14, 22, 0.96);
+  opacity: 0;
+  transition: opacity 1.5s ease;
+  --torch-x: 50vw;
+  --torch-y: 50vh;
+  -webkit-mask-image: radial-gradient(circle at var(--torch-x) var(--torch-y), transparent 0, transparent 60px, #000 110px);
+  mask-image: radial-gradient(circle at var(--torch-x) var(--torch-y), transparent 0, transparent 60px, #000 110px);
+}
+.darkness.on { opacity: 1; }
+
+/* Debug panel (only with ?debug in the URL) */
+.debug {
+  margin-top: 24px;
+  padding: 10px;
+  border: 2px dashed var(--ink);
+  border-radius: 12px;
+  font-size: 0.85rem;
+  display: grid;
+  gap: 6px;
+}
+.debug-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.debug-btn {
+  font: inherit;
+  padding: 3px 8px;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+.debug-btn.armed { background: var(--yellow); }
+.debug-msg { font-weight: 800; }
+
+/* Respect reduced-motion: no wobble / spin / stamp bounce. */
+@media (prefers-reduced-motion: reduce) {
+  .otto.telegraph .otto-face,
+  .board.spin-in { animation: none; }
+  .stamp { animation: stamp-fade 1.6s linear forwards; }
+  @keyframes stamp-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+  .darkness { transition-duration: 0.8s; }
+}
 
 .btn {
   font-family: 'Permanent Marker', cursive;
