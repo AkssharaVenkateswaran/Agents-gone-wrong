@@ -223,3 +223,29 @@ export async function performSabotage(kind, apply, clickSound) {
     apply();
   }
 }
+
+// --- HACK.EXE: Otto retypes every line you changed, then clicks [RUN] ------------------------
+// editor: the hackEditor.js functions. steps: [{ line, from, to }] (line index, old text, new text).
+export async function performHackRestore(editor, steps, clickSound) {
+  for (const { line, from, to } of steps) {
+    await moveTo(editor.lineElement(line));
+    await click(clickSound);
+    editor.setLineText(line, from, { selected: true }); // select the whole line
+    await wait(220);
+    let text = from;
+    while (text.length > 0) {
+      text = text.slice(0, -2); // fast, two letters at a time
+      editor.setLineText(line, text, { typing: true });
+      await wait(10);
+    }
+    for (const letter of to) {
+      text += letter;
+      editor.setLineText(line, text, { typing: true });
+      await wait(14);
+    }
+    editor.setLineText(line, to);
+    await wait(120);
+  }
+  await moveTo(editor.runButton());
+  await click(clickSound);
+}

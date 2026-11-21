@@ -50,6 +50,9 @@ export function freshMatchState() {
     stats: newStats(),
     log: newLog(),          // what happened this match (saved to Otto's memory in Snowflake)
     memory: { status: 'idle', stats: null }, // Otto's memory: 'idle' | 'loading' | 'ready' | 'offline'
+    hack: null,             // HACK.EXE: the running hack { overrides, original, changed, turnsLeft } (see hack.js)
+    hackComments: [],       // Otto's angry comments at the top of otto.cfg (kept all match)
+    forcedLook: null,       // { mood, until }: a HACK.EXE reaction face (see emotions.js)
     terminal: [],           // OTTO@AGENT:~$ — Otto's commands and their results (see terminal.js)
     tactics: null,          // what beats humans across everyone's games (GET /api/tactics), or null
     matchOver: false,
@@ -119,6 +122,9 @@ export function freshRoundState(roundNumber) {
           stolenDisk: null, graffiti: [], unplugged: false }, // (the last 3: the roaming minions)
     roundBonks: 0,         // points earned from bonking roaming minions this round (max 5)
     lastSabotageTurn: -99, // Otto turn of the last sabotage (max once per 3 Otto turns)
+    roundHacks: 0,         // hacks run this round (the 2nd is detected at once and locks the editor)
+    hackLocked: false,     // HACK.EXE shows ACCESS DENIED for the rest of the round
+    hackRetaliate: false,  // Otto cheats once on his next turn after detecting a hack
     ruleTyping: null,      // { category, text, selected } while Otto's cursor types a new rule
 
     // --- Power-ups in use ---

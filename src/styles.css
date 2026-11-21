@@ -974,6 +974,40 @@ body.cracks-pulse .crack { animation: crack-pulse 1.6s steps(4) infinite; }
 }
 .tv-osd.on { display: block; }
 
+/* ==========================================================================
+   HACK.EXE: the player edits Otto's config (HACK.md)
+   ========================================================================== */
+.hack-window { position: fixed; z-index: 58; display: flex; flex-direction: column; min-height: 0; }
+.hack-window[hidden] { display: none; }
+.hack-body { display: flex; flex-direction: column; gap: 8px; padding: 8px; min-height: 0; overflow: hidden; }
+.hack-code {
+  display: flex; min-height: 220px; flex: 1; overflow: hidden;
+  background: #05060d; border: 3px solid var(--ink); box-shadow: inset 0 0 0 2px #1b2a1b;
+  font: 18px/22px var(--text-font); color: var(--lime); text-shadow: var(--glow);
+}
+.hack-gutter {
+  flex: none; width: 30px; padding: 6px 4px; overflow: hidden; white-space: pre; text-align: right;
+  color: #4d6b4d; border-right: 2px solid #1b2a1b; user-select: none;
+}
+.hack-text, .hack-lines {
+  flex: 1; min-width: 0; margin: 0; padding: 6px 8px; border: 0; outline: none; resize: none;
+  background: transparent; color: inherit; font: inherit; white-space: pre; overflow: auto; caret-color: var(--lime);
+}
+.hack-text:focus-visible { box-shadow: inset 0 0 0 2px var(--cyan); }
+.hack-lines[hidden], .hack-text[hidden], .hack-gutter[hidden] { display: none; }
+.hack-line { min-height: 22px; white-space: pre; }
+.hack-line.selected { background: var(--lime); color: #05060d; text-shadow: none; }
+.hack-line.typing::after { content: '█'; animation: blink 0.6s steps(1) infinite; }
+.hack-line.otto-comment { color: var(--pink); }
+.hack-errors { margin: 0; min-height: 22px; white-space: pre-line; font: 18px/1.1 var(--text-font); color: var(--pink); }
+.hack-buttons { display: flex; gap: 8px; }
+.hack-denied { display: grid; gap: 8px; place-items: center; padding: 20px 8px; text-align: center; background: #05060d; border: 3px solid var(--ink); }
+.hack-denied[hidden] { display: none; }
+.denied-title { margin: 0; font: 22px var(--pixel-font); color: #ff4f5a; text-shadow: 2px 2px 0 var(--ink); animation: blink 1s steps(1) infinite; }
+/* the padlock on RULES.TXT while otto.rulesLocked = true */
+.padlock { display: inline-block; position: relative; width: 12px; height: 9px; margin-left: 6px; background: var(--yellow); border: 2px solid var(--ink); vertical-align: -1px; }
+.padlock::before { content: ''; position: absolute; left: 1px; top: -9px; width: 6px; height: 7px; border: 2px solid var(--ink); border-bottom: 0; }
+
 /* --- Reduced motion: nothing drifts, bounces, spins or flies. --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .drift, .dots i, .otto-face.think .f1, .otto-face.think .f2, .otto-face.flicker,
@@ -988,6 +1022,7 @@ body.cracks-pulse .crack { animation: crack-pulse 1.6s steps(4) infinite; }
   .term-cmd.typing { animation: none; max-width: 100%; }
   .roamer svg, .roamer.walking svg { animation: none; }
   .tv-layer .tv-bar, .tv-layer.zap .tv-snow { animation: none; }
+  .denied-title, .hack-line.typing::after { animation: none; }
   .glitch-lines, body.glitch-shudder .toolbox, body.glitch-shudder .otto-side, body.glitch-shudder .topbar, body.cracks-pulse .crack { animation: none; }
   .roamer.bonked { animation: none; opacity: 0; }
   .cable span { animation: none; }

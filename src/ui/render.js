@@ -60,11 +60,11 @@ import {
 const DISK_NAMES = {
   flick: 'Flick', lightSwitch: 'Light Switch', eraser: 'Eraser', paperweight: 'Paper\u00ADweight',
   glueStick: 'Glue Stick', timeOut: 'Time Out', myOwnLine: 'My Own Line', doubleMark: 'Double Mark',
-  veto: 'Veto', amendment: 'Amend\u00ADment',
+  veto: 'Veto', amendment: 'Amend\u00ADment', hack: 'HACK',
 };
 const DISK_COLOURS = {
   flick: 'c', lightSwitch: 'y', eraser: 'p', paperweight: 'm', glueStick: 'l',
-  timeOut: 'u', myOwnLine: 'n', doubleMark: 'w', veto: 'o', amendment: 'v',
+  timeOut: 'u', myOwnLine: 'n', doubleMark: 'w', veto: 'o', amendment: 'v', hack: 'r',
 };
 const CATEGORY_LABELS = { win: 'WIN', placement: 'PLACE', twist: 'TWIST' };
 
@@ -141,8 +141,9 @@ export function initRender(rootElement, callbacks) {
     if (e.key === 'c' || e.key === 'C') handlers.onCatch();
     else if (e.key === 'Escape') handlers.onCancel();
     else {
-      const powerUp = POWERUPS.find((p) => p.key === e.key);
+      const powerUp = POWERUPS.find((p) => p.key === e.key.toLowerCase());
       if (powerUp) {
+        e.preventDefault(); // (so "H" doesn't also type into HACK.EXE when it opens)
         insertingDisk = powerUp.id;
         handlers.onPowerUp(powerUp.id);
       }
@@ -730,7 +731,9 @@ function renderOtto() {
     : `<span class="otto-face ${state.telegraph ? 'flicker' : ''}">${sprite(OTTO_FACES[look.face])}</span>`;
   const bubble = look.thinking
     ? '<span class="dots" aria-label="Otto is thinking"><i></i><i></i><i></i></span>'
-    : escapeHtml(state.ottoSays);
+    : state.hack?.overrides?.taunts === false
+      ? '...' // HACK.EXE: otto.taunts = false, Otto can only mutter
+      : escapeHtml(state.ottoSays);
   const patience = state.patience;
   const stageLabel = STAGES[stageOf(patience)].label;
   const segments = 20;
@@ -824,7 +827,7 @@ function renderRules() {
       <svg class="rules-scribble" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
         <path d="${wobblyLine(5, 20, 95, 30, 7, 6, 6)} ${wobblyLine(8, 60, 92, 45, 9, 6, 6)} ${wobblyLine(10, 85, 90, 80, 13, 6, 6)}" />
       </svg>
-      ${titleBar('RULES.TXT')}
+      ${titleBar(state.hack?.overrides?.rulesLocked ? 'RULES.TXT <i class="padlock" title="Locked by your hack (otto.rulesLocked)"></i>' : 'RULES.TXT')}
       <div class="window-body">
         ${rowsHtml}
         <p class="countdown">${sprite(HOURGLASS)} ${countdown}${state.amendmentPending ? ' (YOU PICK)' : ''}
@@ -987,6 +990,10 @@ function renderDebug() {
           <button class="debug-btn" data-debug="tvBurst">TV static burst</button>
           <button class="debug-btn" data-debug="ottoDragToolbox">Otto: drag toolbox</button>
           <button class="debug-btn" data-debug="ottoRewriteRule">Otto: rewrite rule</button></div>
+        HACK.EXE: <div class="debug-row">
+          <button class="debug-btn" data-debug="openHack">Open HACK.EXE</button>
+          <button class="debug-btn" data-debug="simulateHack">Simulate hack (cheatChance = 0)</button>
+          <button class="debug-btn" data-debug="forceDetect">Force detection now</button></div>
         <div class="debug-row">
           <button class="debug-btn" data-debug="patienceUp">Patience +25</button>
           <button class="debug-btn" data-debug="patienceDown">Patience −25</button>

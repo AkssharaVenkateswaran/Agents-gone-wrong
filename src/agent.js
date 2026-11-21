@@ -60,6 +60,19 @@ export function pickCheat(state) {
     return null;
   }
 
+  // HACK.EXE retaliation: right after Otto catches a hack he cheats once, ignoring the
+  // cooldowns and the usual timing, but still never a cheat that decides the round.
+  if (state.hackRetaliate) {
+    state.hackRetaliate = false;
+    const options = CHEATS.filter((cheat) => cheat.canUse(state));
+    while (options.length > 0) {
+      const cheat = options.splice(Math.floor(Math.random() * options.length), 1)[0];
+      const trial = simulateCheat(state, cheat);
+      if (trial) return { cheat, trial, dataDriven: false, retaliation: true };
+    }
+    return null;
+  }
+
   if (!state.roundRuleChanges) return null;        // fair play until the round's first rule change
   if (state.ottoGrace) return null;              // no cheating right after a rule change
   if (state.turnNumber <= NO_CHEAT_TURNS) return null;
@@ -68,9 +81,7 @@ export function pickCheat(state) {
   // No need to cheat if a normal move already wins.
   if (findWinningSquare(state, 'O') !== -1) return null;
 
-  const chance =
-    MIN_CHEAT_CHANCE + (MAX_CHEAT_CHANCE - MIN_CHEAT_CHANCE) * (state.frustration / 100);
-  if (Math.random() > chance) return null;
+  if (Math.random() > cheatChance(state)) return null;
 
   const options = CHEATS.filter(
     (cheat) =>
@@ -87,6 +98,14 @@ export function pickCheat(state) {
     if (trial) return { cheat, trial, dataDriven: cheatScore(state.tactics, cheat.id) !== null };
   }
   return null;
+}
+
+// Otto's chance to cheat on a turn (when cheating is allowed at all): from 20% at
+// patience 100 to 80% at 0, unless a HACK.EXE hack set otto.cheatChance.
+export function cheatChance(state) {
+  const hacked = state.hack?.overrides?.cheatChance;
+  if (hacked !== undefined) return hacked;
+  return MIN_CHEAT_CHANCE + (MAX_CHEAT_CHANCE - MIN_CHEAT_CHANCE) * (state.frustration / 100);
 }
 
 // --- Otto's patience ------------------------------------------------------------------------

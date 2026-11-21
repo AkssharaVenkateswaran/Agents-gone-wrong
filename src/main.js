@@ -79,6 +79,9 @@ import { initOttoCursor, setCursorPatience, slap, park } from './ui/ottoCursor.j
 import { initSwarm, clearSwarm, spawnMinion } from './ui/swarm.js';
 import { initGlitch, glitchBurst } from './ui/glitch.js';
 import { initTv, tvInterference } from './ui/tv.js';
+import * as hackEditor from './ui/hackEditor.js';
+import { performHackRestore } from './ui/performances.js';
+import { realValues, currentValues, configLines, settingLine, parseConfig, startHack, tickHack, detectHack, restoreHack } from './hack.js';
 import {
   showPopup,
   spinBoardEffect,
@@ -121,7 +124,25 @@ function earn(amount) {
 
 // Otto says something. From the Unhinged stage on, it sometimes SHOUTS.
 function talk(text) {
+  // HACK.EXE: with otto.taunts = false Otto can only mutter.
+  if (state.hack?.overrides?.taunts === false) {
+    state.ottoSays = '...';
+    return;
+  }
   state.ottoSays = !state.calm && stage() >= 2 && Math.random() < 0.3 ? shout(text) : text;
+}
+
+// A HACK.EXE reaction face for a few seconds (shows over every other mood, see emotions.js).
+function forceLook(mood, ms) {
+  const forced = { mood, until: Date.now() + ms };
+  state.forcedLook = forced;
+  emit('change');
+  setTimeout(() => {
+    if (state.forcedLook === forced) {
+      state.forcedLook = null;
+      emit('change');
+    }
+  }, ms);
 }
 
 // Otto's mood for a few seconds (defeated, victorious, glitching, bored...), see emotions.js.
@@ -249,6 +270,7 @@ function playerPlace(landing) {
 
 function endPlayerTurn() {
   stopTurnTimer();
+  if (hackEditor.editorMode() !== 'closed') hackEditor.closeEditor(); // your turn is over
   state.mode = null;
   state.extraMarks = 0;
   state.playerTurns++;
@@ -363,6 +385,10 @@ function activatePowerUp(id) {
     setNotice('Place your X in your new line first.');
     return;
   }
+  if (id === 'hack' && state.hackLocked) {
+    hackEditor.openDenied(); // Otto locked the editor for the rest of the round
+    return;
+  }
   if (!canAfford(state, powerUp)) {
     setNotice(`${powerUp.name} costs ${powerUp.cost} points. You have ${state.points}.`);
     return;
@@ -382,6 +408,11 @@ function activatePowerUp(id) {
       state.mode = { type: 'flick' };
       setNotice('Click a minion to flick it (Esc to cancel).');
     }
+    return;
+  }
+
+  if (id === 'hack') {
+    openHack();
     return;
   }
 
@@ -506,6 +537,12 @@ const waitForClick = () => new Promise((resolve) => (resolveClick = resolve));
 // the change waits a turn ("NEW RULE DELAYED").
 // Returns false if the match was reset meanwhile.
 async function ruleChangeScene() {
+  // HACK.EXE: otto.rulesLocked = true stops rule changes until Otto restores it.
+  if (state.hack?.overrides?.rulesLocked) {
+    state.nextRuleAt = state.playerTurns + 1;
+    state.ruleDelayed = true;
+    return true;
+  }
   const safe = safeRuleIds(state);
   if (safe.length === 0) {
     state.nextRuleAt = state.playerTurns + 1;
@@ -592,6 +629,9 @@ async function ottoTurn() {
   tickCooldowns(state);
   if (state.spinBlockedTurns > 0) state.spinBlockedTurns--;
 
+  // HACK.EXE: has Otto noticed that someone edited his config?
+  if (tickHack(state) && !(await hackDetected())) return;
+
   // Time Out makes Otto skip a turn.
   if (state.ottoSkipTurns > 0) {
     state.ottoSkipTurns--;
@@ -608,7 +648,8 @@ async function ottoTurn() {
   termLog(state, 'scan --board', scanResult(state, reverse ? [] : winningSquares(state, 'O'), reverse ? [] : winningSquares(state, 'X')));
   if (stage() === 3 && !state.calm && Math.random() < 0.35) termLog(state, ...panicLine());
   emit('change');
-  if (!(await pause(THINK_MIN_MS + Math.random() * THINK_EXTRA_MS))) return;
+  const hackedThink = state.hack?.overrides?.thinkTime; // HACK.EXE: otto.thinkTime
+  if (!(await pause(hackedThink !== undefined ? hackedThink * 1000 : THINK_MIN_MS + Math.random() * THINK_EXTRA_MS))) return;
   state.ottoThinking = false;
 
   // Unhinged or worse: now and then Otto's cursor messes with the interface
@@ -618,8 +659,9 @@ async function ottoTurn() {
   // A cheat (rarely: never early, at most 1 per 3 turns, never one that decides the round).
   const picked = pickCheat(state);
   if (picked) {
-    const { cheat, trial, dataDriven } = picked;
+    const { cheat, trial, dataDriven, retaliation } = picked;
     state.lastCheatTry = state.turnNumber;
+    if (retaliation) termLog(state, 'retaliate --target=human', 'you touched my code. my turn.');
     // Telegraph: Otto's screen flickers ">:)". The player can click Otto now.
     state.telegraph = cheat.id;
     talk(say(cheat.id === 'rewriteRules' ? 'ruleTelegraph' : 'telegraph'));
@@ -700,6 +742,104 @@ function cheatCommand(cheat, trial) {
 // 2000s TV interference on the background (see ui/tv.js).
 function tvBurst(kind) {
   tvInterference(kind, state.calm ? 0 : stage(), state.calm);
+}
+
+// --- HACK.EXE (see hack.js and ui/hackEditor.js) --------------------------------------------
+
+// Open the editor with Otto's real current config.
+function openHack() {
+  if (!isPlayersTurn() || state.hack) return;
+  hackEditor.openForPlayer(configLines(currentValues(state), state.hackComments));
+}
+
+// [RUN]: parse the text (never run it), apply the hack, and it's Otto's turn.
+function runHack(text) {
+  if (!isPlayersTurn() || state.hack) return;
+  const powerUp = getPowerUp('hack');
+  const original = realValues(state);
+  const { values, changed, errors } = parseConfig(text, original);
+  if (errors.length) {
+    hackEditor.showErrors(errors);
+    return;
+  }
+  if (changed.length === 0) {
+    hackEditor.showErrors(['nothing changed. otto is unimpressed.']);
+    return;
+  }
+  if (!canAfford(state, powerUp)) {
+    hackEditor.showErrors([`HACK costs ${powerUp.cost} points. You have ${state.points}.`]);
+    return;
+  }
+  hackEditor.closeEditor();
+  pay(powerUp);
+  startHack(state, values, changed, original);
+  termLog(state, 'otto.cfg --reload', 'config reloaded.');
+  state.notice = `Hacked: ${changed.map((key) => `otto.${key}`).join(', ')}. Otto will notice...`;
+  state.ottoThinking = true; // he looks briefly confused
+  if (values.mood === 'happy' && changed.includes('mood')) {
+    // He looks happy for a moment... then his face glitches back to furious.
+    forceLook('happy', 1300);
+    setTimeout(() => {
+      forceLook('glitching', 400);
+      setTimeout(() => {
+        forceLook('furious', 2200);
+        state.ottoSays = "don't tell me how to feel.";
+        emit('change');
+      }, 400);
+    }, 1300);
+  }
+  if (changed.includes('taunts') && values.taunts === false) state.ottoSays = '...';
+  afterPowerUp(powerUp); // uses your turn
+}
+
+function cancelHack() {
+  hackEditor.closeEditor();
+}
+
+// Otto noticed the hack: furious, loses patience, then retypes his values by hand.
+// Returns false if the match ended or was reset meanwhile.
+async function hackDetected() {
+  const hack = state.hack;
+  if (!hack) return true;
+  const myGeneration = generation;
+  termLog(state, 'integrity.check otto.cfg', 'TAMPERING DETECTED. who touched my code??');
+  forceLook('furious', 3500);
+  const { clamped } = detectHack(state);
+  updateStageEffects();
+  if (clamped) state.ottoSays = 'NOT. YET.';
+  emit('change');
+  if (state.patience <= 0) {
+    patienceRanOut(); // (only possible after round 3)
+    return false;
+  }
+  if (!(await pause(700))) return false;
+
+  // His cursor flies to HACK.EXE, selects each changed line and types the original back.
+  const hackedValues = { ...hack.original, ...hack.overrides };
+  const lines = configLines(hackedValues, state.hackComments);
+  hackEditor.openForOtto(lines);
+  const steps = hack.changed.map((key) => ({
+    line: lines.indexOf(settingLine(key, hackedValues[key])),
+    from: settingLine(key, hackedValues[key]),
+    to: settingLine(key, hack.original[key]),
+  }));
+  await performHackRestore(hackEditor, steps, sfx.click);
+  if (myGeneration !== generation) return false;
+  const silenced = hack.overrides.taunts === false;
+  restoreHack(state);
+  hackEditor.addTopLine(state.hackComments[0]);
+  termLog(state, 'otto.cfg --reload', 'restored. nice try, human.');
+  state.ottoSays = silenced ? 'I WILL NOT BE SILENCED.' : 'Restored. Nice try, human.';
+  emit('change');
+  if (!(await pause(1200))) return false;
+  if (state.hackLocked) {
+    termLog(state, 'chmod 000 HACK.EXE', 'editor locked for this round.');
+    hackEditor.openDenied();
+    emit('change');
+    if (!(await pause(1400))) return false;
+  }
+  hackEditor.closeEditor();
+  return true;
 }
 
 // Cosmetic interface sabotage by Otto's cursor (stage 2+, not in Calm mode).
@@ -1164,6 +1304,7 @@ function playAgain() {
   restoreTab();
   clearFakePopups();
   clearSwarm();
+  hackEditor.closeEditor();
   resetMatch();
   setPatience(state, 100);
   state.ottoSays = say('matchStart');
@@ -1276,6 +1417,25 @@ function debugAction(action, value) {
       setTempMood(value, 3000);
     }
     state.debug.message = `Otto's mood: ${value}`;
+  } else if (action === 'openHack') {
+    if (state.hackLocked) hackEditor.openDenied();
+    else if (state.hack) state.debug.message = 'A hack is already running.';
+    else if (isPlayersTurn()) openHack();
+    else state.debug.message = 'Wait for your turn.';
+  } else if (action === 'simulateHack') {
+    if (state.hack) state.debug.message = 'A hack is already running.';
+    else {
+      const original = realValues(state);
+      startHack(state, { ...original, cheatChance: 0 }, ['cheatChance'], original);
+      termLog(state, 'otto.cfg --reload', 'config reloaded.');
+      state.debug.message = `Hacked otto.cheatChance = 0 (Otto notices after ${state.hack.turnsLeft} of his turns).`;
+    }
+  } else if (action === 'forceDetect') {
+    if (!state.hack) state.debug.message = 'No hack is running (try "Simulate hack").';
+    else {
+      hackDetected();
+      state.debug.message = 'Otto detects the hack now.';
+    }
   } else if (action === 'spawnMinion') {
     spawnMinion();
     state.debug.message = 'A minion is on its way (bonk it for +1).';
@@ -1369,6 +1529,7 @@ initRender(document.getElementById('app'), {
 });
 initOttoCursor();
 initTv(staticNoise);
+hackEditor.initHackEditor({ onRun: runHack, onCancel: cancelHack });
 initGlitch(() => ({
   patience: state.patience,
   calm: state.calm,

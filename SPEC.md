@@ -127,8 +127,9 @@ Lights Out lasts until countered or 3 player turns pass. It must be a smooth fad
 | **Double Mark** | 6 | The player places two X marks: that is their whole turn |
 | **Veto** | 5 | Cross out the newest rule and bring back the one it replaced |
 | **Amendment** | 6 | At the next rule change, the player picks the new rule from 3 cards instead of Otto |
+| **HACK** | 3 | Opens `HACK.EXE` to edit Otto's config file (see below); paid on `[RUN]` |
 
-Keyboard shortcuts: 1–9 and 0 for the 10 power-ups.
+Keyboard shortcuts: 1–9 and 0 for the 10 power-ups, `H` for HACK.
 
 Power-ups are pixel floppy disks in the `TOOLBOX.EXE` window on the left, each in its own palette colour, with its full name on the label (up to 2 lines, never cut off) and its cost as a pixel number. Keyboard shortcuts are in the tooltip. A disk is greyed out only when it's unaffordable or would do nothing right now (the tooltip says which). The disks are as big as the window allows.
 
@@ -163,6 +164,13 @@ Must work on **any grid size** (up to 7×7) and for the **current** win rule: an
 - **Glitching** grows from patience 75 down to 0 (scanlines → RGB split/corrupted letters → shifted slices/(Not Responding) → smears/inverted blocks/shudder → tears/pulsing cracks/cursor trail); short bursts, never over the board, turn indicator or pop-ups.
 - **2000s TV interference** on the background wall when a cheat lands or a rule changes (static snow, rolling bar, jitter, zap, green OSD), stronger at higher stages.
 - Reduced motion and Calm mode: no swarm, static-only glitches and a still TV frame. None of this changes the rules, balance or fairness.
+
+### HACK.EXE: the player rewrites Otto's code (`HACK.md`)
+- The **HACK** floppy (3 points, uses your turn, key `H`) opens `HACK.EXE` over the left column (never over the board): Otto's real current `otto.cfg` (`cheatChance`, `blockChance`, `takeWinChance`, `thinkTime`, `rulesLocked`, `mood`, `taunts`) in a VT323 code editor with line numbers, `[RUN]` and `[CANCEL]`.
+- **Safety:** the text is only parsed (`src/hack.js`): lines `otto.<setting> = <value>` with `//` comments, known settings only, numbers clamped, booleans and moods checked. Anything else shows a pixel error line (`line 3: otto doesn't know "fly"`) and nothing runs. No `eval`/`Function`, and the text is never put into HTML.
+- **Effect:** the values apply at once (terminal `> config reloaded.`). Otto notices after **2** of his turns (**1** below 50 patience; a **2nd hack in a round at once**): `integrity.check otto.cfg` / `TAMPERING DETECTED`, furious face, **−8 patience** (never below 5 before the end of round 3), then his cursor retypes every changed line, clicks `[RUN]` (`> restored. nice try, human.`) and adds `// DO NOT TOUCH. — Otto` to the file for the rest of the match. He retaliates with one cheat on that turn (ignores cooldowns, still never decides the round). After a 2nd hack the editor shows `ACCESS DENIED` for the rest of the round.
+- Special reactions: `taunts = false` → `...` until restored, then `I WILL NOT BE SILENCED.`; `rulesLocked = true` → a padlock on `RULES.TXT` (and no rule changes); `mood = "happy"` → happy for a moment, then glitches back to furious: `don't tell me how to feel.`
+- `npm run hack` checks the parser (invalid input never runs), the detection timing, the patience cost, the retaliation and the lock. The balance bot never hacks, so `npm run balance` is unchanged.
 
 ### Otto's personality
 Smug, petty, theatrical and funny — never cruel. Speaks in yellow pixel speech bubbles (at most 2 lines). Write at least 5 lines per situation in `dialogue.js`: match start, getting bored, telegraphing a cheat, cheat succeeds, cheat countered, cheat caught, player blocks it, Otto wins a round, Otto loses a round, draw, round start, each stage (announced once), desperate lines, rule warning, each new rule, vetoed, amended, Reverse day ending, out of room, sudden death, and the rampage lines. All dialogue is scripted (no API calls) so it works offline and is reliable for demos.

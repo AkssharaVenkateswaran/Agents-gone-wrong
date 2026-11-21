@@ -148,6 +148,18 @@ export const POWERUPS = [
       state.amendmentPending = true; // at the next rule change, the player chooses
     },
   },
+  {
+    id: 'hack',
+    name: 'Hack',
+    cost: 3,
+    key: 'h',
+    counters: null,
+    help: "Open HACK.EXE and edit Otto's config file (otto.cfg). He WILL notice.",
+    canUse: (state) => !state.hack && !state.hackLocked,
+    apply() {
+      // (main.js opens the editor; the cost is paid when you press [RUN])
+    },
+  },
 ];
 
 export function getPowerUp(id) {

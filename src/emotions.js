@@ -58,6 +58,9 @@ export function ottoLook(state, now = Date.now()) {
   }
   // The Otto-wins screen: victorious for good.
   if (state.ending === 'banner' && state.result === 'O') return look('victorious');
+  // HACK.EXE reactions (furious when he detects a hack, a forced happy that glitches
+  // back to furious) show over everything else for their few seconds.
+  if (state.forcedLook && state.forcedLook.until > now) return look(state.forcedLook.mood);
   // Temporary mood priority (highest first):
   //   defeated / victorious > scheming > thinking > happy / bored (/ glitching) > base mood.
   // So "happy" (at the start of a round) never hides thinking or scheming.
@@ -71,6 +74,9 @@ export function ottoLook(state, now = Date.now()) {
     return { ...look('thinking', 'thinkLeft', colours), thinking: true };
   }
   if (temp) return tempLook(); // happy, bored, glitching
+  // HACK.EXE: a hacked otto.mood (smug / bored / defeated) until Otto restores it.
+  const hackedMood = state.hack?.overrides?.mood;
+  if (hackedMood && hackedMood !== 'happy') return look(hackedMood, FACE_FOR[hackedMood], COLOURS_FOR[hackedMood] || COLOURS_FOR[base] || 'calm');
   return look(base);
 }
 

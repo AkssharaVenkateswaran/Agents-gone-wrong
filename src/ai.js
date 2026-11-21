@@ -55,7 +55,15 @@ export const SKILL = [
 
 export function skillFor(state) {
   const patience = 100 - state.frustration;
-  return SKILL.find((level) => patience >= level.minPatience);
+  const level = SKILL.find((entry) => patience >= entry.minPatience);
+  // HACK.EXE: a hacked otto.blockChance / otto.takeWinChance replaces Otto's real ones.
+  const hacked = state.hack?.overrides;
+  if (!hacked) return level;
+  return {
+    ...level,
+    block: hacked.blockChance ?? level.block,
+    takeWin: hacked.takeWinChance ?? level.takeWin,
+  };
 }
 
 // Every square where `mark` could make a line right now.
