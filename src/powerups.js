@@ -3,15 +3,17 @@
 //   id        - short name used in code
 //   name      - name shown on the sticker button
 //   cost      - points it costs
-//   key       - keyboard shortcut (1-8)
+//   key       - keyboard shortcut (1-9, then 0)
 //   counters  - id of the cheat it counters (or null)
 //   help      - one-line description (used for the button's aria-label / tooltip)
 //   canUse(state)        - is it useful right now? (if not, the button looks faded)
 //   apply(state, choice) - do it. `choice` is extra info for power-ups that need
-//                          one: the minion square for Flick, 'row'/'col' for My Own Line.
+//                          one: the minion square for Flick, 'row'/'col' for My Own Line,
+//                          the chosen rule for Amendment.
 
 import { addRow, addColumn, lineCells } from './board.js';
 import { getCheat, MAX_GRID_SIZE } from './cheats.js';
+import { vetoNewest, activateRule, drawRules } from './rules.js';
 
 export const POWERUPS = [
   {
@@ -120,6 +122,30 @@ export const POWERUPS = [
     canUse: (state) => state.extraMarks === 0,
     apply(state) {
       state.extraMarks = 1; // one extra X after the normal one
+    },
+  },
+  {
+    id: 'veto',
+    name: 'Veto',
+    cost: 5,
+    key: '9',
+    counters: 'rewriteRules',
+    help: 'Cross out the newest rule and bring back the one before it.',
+    canUse: (state) => !!state.newestCategory && !!state.rules[state.newestCategory].previous,
+    apply(state) {
+      vetoNewest(state);
+    },
+  },
+  {
+    id: 'amendment',
+    name: 'Amendment',
+    cost: 6,
+    key: '0',
+    counters: null,
+    help: 'You pick the next rule from 3 cards instead of Otto.',
+    canUse: (state) => state.era === 'modern' && drawRules(state).length > 0,
+    apply(state, ruleId) {
+      activateRule(state, ruleId);
     },
   },
 ];

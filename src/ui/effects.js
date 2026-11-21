@@ -5,6 +5,7 @@
 
 // --- Rubber stamp ("CAUGHT!") ------------------------------------------------
 export function showStamp(text) {
+  document.querySelectorAll('.stamp').forEach((old) => old.remove()); // one stamp at a time
   const stamp = document.createElement('div');
   stamp.className = 'stamp';
   stamp.textContent = text;

@@ -1,51 +1,80 @@
 // main.js
-// Boots the game and runs the turn loop:
+// Boots the game and runs ONE long match:
 //
-//   player clicks a square -> place X -> check for win/draw
-//     (on their turn the player can also spend points on power-ups)
+//   player's turn: click a square (following the current rules) or use power-ups
 //   -> Otto's turn:
-//        maybe pick a cheat -> TELEGRAPH it (Otto wobbles, "hehe…") for ~1 second
-//            -> player clicks Otto in time? CAUGHT! (cheat blocked, Otto moves normally)
-//            -> otherwise the cheat happens (and Otto may still make a normal move)
-//        or just make a normal move
-//   -> check for win/draw -> back to the player.
+//        every 4 player turns: Otto REWRITES A RULE (the Rule Book shakes first)
+//        maybe a cheat -> TELEGRAPH it (Otto wobbles, "hehe…") for ~1 second
+//            -> player clicks Otto in time? CAUGHT! (cheat blocked)
+//        then a normal move (following the current rules)
+//   -> repeat until someone makes a line under the CURRENT win rule,
+//      or the FINAL RULE (most lines of 3) decides it at 9x9 / after 30 turns.
+//
+// The opening is classic 3x3 tic-tac-toe in the 1952 "OXO on EDSAC" style. At the
+// first rule change Otto realises the game is solved and the old screen peels away.
 
 import './styles.css';
-import { state, on, emit, resetMatch, resetRound, ROUNDS_TO_WIN } from './state.js';
-import { findWinner, isFull, isPlayable, findWinningMove, perfectPlayResult } from './board.js';
+import { state, on, emit, resetMatch, MAX_TURNS, RULE_EVERY } from './state.js';
+import { emptyCells, addRow, addColumn, linesOf, LINE_LENGTH } from './board.js';
 import { chooseMove, pickCheat, addFrustration, tickCooldowns } from './agent.js';
 import { getCheat } from './cheats.js';
 import { getPowerUp, canAfford } from './powerups.js';
-import { addPoints, POINTS, QUICK_COUNTER_TURNS } from './scoring.js';
-import { say } from './dialogue.js';
-import { initRender } from './ui/render.js';
+import { addPoints, POINTS, QUICK_COUNTER_TURNS, RULE_BONUS_TURNS } from './scoring.js';
+import {
+  MAX_BOARD,
+  getRule,
+  drawRules,
+  landingSquare,
+  whyIllegal,
+  placeMove,
+  putMark,
+  lineFor,
+  isReverseDay,
+  expireRules,
+  fadeOldMarks,
+  affectedSquares,
+  activateRule,
+  currentTurn,
+} from './rules.js';
+import { ottoRewriteRules, findWinningSquare } from './ai.js';
+import { say, sayRule } from './dialogue.js';
+import { initRender, updateTurnTimer } from './ui/render.js';
 import { showStamp, spinBoardEffect, popPoints, createPeelSheet } from './ui/effects.js';
 
-const OTTO_THINK_MS = 600;  // small pause so Otto's move doesn't feel instant
-const TELEGRAPH_MS = 1100;  // how long the player has to catch a cheat
-const SOLVED_PAUSE_MS = 2200; // time to read "this game is SOLVED" before the 1952 screen peels
+const OTTO_THINK_MS = 600;       // small pause so Otto's move doesn't feel instant
+const TELEGRAPH_MS = 1100;       // how long the player has to catch a cheat
+const SOLVED_PAUSE_MS = 2200;    // time to read "this game is SOLVED" before the 1952 screen peels
+const RULE_TELEGRAPH_MS = 1500;  // the Rule Book shakes for this long before a rule changes
+const RULE_READ_MS = 1400;       // pause after a new rule so the player can read it
+const HIGHLIGHT_MS = 2000;       // affected squares glow for 2 seconds
+const TURN_TIMER_MS = 5000;      // the "5-second timer" rule
 
-// --- Timers ----------------------------------------------------------------
-// `later` is setTimeout, but if the round/match was reset in the meantime the
-// callback is ignored. (Otherwise an old Otto move could land on a new board!)
+// --- Timing ------------------------------------------------------------------
+// `pause(ms)` waits, then tells us whether the game is still the same match.
+// (If the player started a new match meanwhile, the old Otto turn must stop.)
 let generation = 0;
-function later(ms, fn) {
+function pause(ms) {
   const myGeneration = generation;
-  setTimeout(() => {
-    if (myGeneration === generation) fn();
-  }, ms);
+  return new Promise((resolve) => setTimeout(() => resolve(myGeneration === generation), ms));
 }
 
-// --- Player's turn -----------------------------------------------------------
-
-function isPlayersTurn() {
-  return state.turn === 'X' && !state.roundOver && !state.matchOver && !state.transitioning;
-}
+const other = (mark) => (mark === 'X' ? 'O' : 'X');
 
 // Give the player points and show a "+N" pop.
 function earn(amount) {
   addPoints(state, amount);
   popPoints(amount);
+}
+
+// Was a rule changed within the last 2 player turns? (For the +3 rule bonus.)
+function soonAfterRuleChange() {
+  return state.playerTurns - state.lastRuleChangeTurn < RULE_BONUS_TURNS;
+}
+
+// --- Player's turn -----------------------------------------------------------
+
+function isPlayersTurn() {
+  return state.turn === 'X' && !state.matchOver && !state.transitioning;
 }
 
 // The player clicked (or pressed Enter on) a square.
@@ -57,30 +86,36 @@ function onCellClick(index) {
     flickMinion(index);
     return;
   }
-
-  // Flick mode is waiting for a minion: any other square is ignored.
   if (state.mode?.type === 'flick') {
     state.notice = 'Click a minion to flick it (Esc to cancel).';
     emit('change');
     return;
   }
-  if (state.mode?.type === 'ownLinePick') return; // choose row/column in the tray first
+  if (state.mode?.type === 'ownLinePick' || state.mode?.type === 'amend') return; // finish choosing first
 
-  if (!isPlayable(state.board, index)) return; // square already taken
-
-  // My Own Line: the free X must go in the new line, and doesn't use up the turn.
+  // My Own Line: the free X goes anywhere in the new line and doesn't use up the turn.
   if (state.mode?.type === 'ownLinePlace') {
-    if (!state.mode.cells.includes(index)) return;
+    if (!state.mode.cells.includes(index) || state.board.cells[index]) return;
     state.mode = null;
-    placeX(index);
-    if (checkRoundEnd()) return;
+    putMark(state, index, 'X');
+    earn(POINTS.placeX);
+    if (checkMatchEnd('X')) return;
     state.notice = 'Free X placed! Now make your normal move.';
     emit('change');
     return;
   }
 
-  placeX(index);
-  if (checkRoundEnd()) return;
+  // A normal move must follow the current placement rules.
+  const landing = landingSquare(state, index); // Gravity makes marks fall
+  const problem = whyIllegal(state, landing);
+  if (problem) {
+    state.notice = problem;
+    emit('change');
+    return;
+  }
+
+  playerPlace(landing);
+  if (checkMatchEnd('X')) return;
 
   // Double Mark: the player gets to place another X before Otto moves.
   if (state.extraMarks > 0) {
@@ -93,21 +128,28 @@ function onCellClick(index) {
   endPlayerTurn();
 }
 
-// Put an X on the board and award points for it.
-function placeX(index) {
-  const ottoThreat = findWinningMove(state.board, 'O'); // was Otto about to win?
-  state.board.cells[index] = 'X';
+// Place the player's X (with Mirror etc.) and award points.
+function playerPlace(landing) {
+  // Was Otto about to make a line here? (On Reverse day lines are bad, so no blocking.)
+  const ottoThreat = isReverseDay(state) ? -1 : findWinningSquare(state, 'O');
+  placeMove(state, landing, 'X');
   state.notice = '';
   earn(POINTS.placeX);
 
-  if (index === ottoThreat) {
+  if (landing === ottoThreat) {
     earn(POINTS.block);
+    if (soonAfterRuleChange()) earn(POINTS.ruleBonus);
     state.ottoSays = say('playerBlocks');
-    if (state.round >= 2 && addFrustration(state, 5)) state.ottoSays = say('frustration');
+    if (state.era === 'modern' && addFrustration(state, 5)) state.ottoSays = say('frustration');
   }
 }
 
 function endPlayerTurn() {
+  stopTurnTimer();
+  state.mode = null;
+  state.extraMarks = 0;
+  state.playerTurns++;
+
   // Lights Out wears off after a few player turns.
   if (state.lightsOut) {
     state.lightsOut.turnsLeft--;
@@ -117,20 +159,51 @@ function endPlayerTurn() {
     }
   }
 
-  // Frustration: the game heading for a draw bores Otto.
-  if (
-    state.round >= 2 &&
-    state.board.rows === 3 &&
-    state.board.cols === 3 &&
-    perfectPlayResult(state.board, 'O') === 'draw'
-  ) {
-    if (addFrustration(state, 4)) state.ottoSays = say('frustration');
-    else if (Math.random() < 0.3) state.ottoSays = say('bored');
+  // Twist rules that tick with the turns.
+  if (expireRules(state)) {
+    state.ottoSays = say('ruleExpired');
+    state.notice = 'Reverse day is over. Lines win again.';
+  }
+  const faded = fadeOldMarks(state);
+  if (faded > 0) state.notice = `${faded} old mark${faded > 1 ? 's' : ''} faded away.`;
+
+  // The longer the game drags on, the grumpier Otto gets.
+  if (state.era === 'modern' && addFrustration(state, 2)) state.ottoSays = say('frustration');
+
+  if (state.playerTurns >= MAX_TURNS) {
+    finalRule();
+    return;
   }
 
   state.turn = 'O';
   emit('change');
-  later(OTTO_THINK_MS, ottoTurn);
+  ottoTurn();
+}
+
+// --- The 5-second timer rule -----------------------------------------------------
+let timerInterval = null;
+
+function startTurnTimer() {
+  stopTurnTimer();
+  if (state.rules.twist.ruleId !== 'timer' || !isPlayersTurn()) return;
+  state.turnDeadline = Date.now() + TURN_TIMER_MS;
+  const myGeneration = generation;
+  timerInterval = setInterval(() => {
+    if (myGeneration !== generation || !isPlayersTurn()) return stopTurnTimer();
+    const left = state.turnDeadline - Date.now();
+    updateTurnTimer(left);
+    if (left <= 0) {
+      stopTurnTimer();
+      state.notice = 'Too slow! The 5-second timer ran out and you lost your turn.';
+      endPlayerTurn();
+    }
+  }, 200);
+}
+
+function stopTurnTimer() {
+  clearInterval(timerInterval);
+  timerInterval = null;
+  state.turnDeadline = null;
 }
 
 // --- Power-ups ---------------------------------------------------------------
@@ -181,10 +254,28 @@ function activatePowerUp(id) {
     return;
   }
 
+  if (id === 'amendment') {
+    // Deal 3 rule cards. The player pays when they pick one.
+    state.mode = { type: 'amend', cards: drawRules(state, 3) };
+    state.notice = 'Amendment: pick the next rule (Esc to cancel).';
+    emit('change');
+    return;
+  }
+
   // Everything else happens immediately.
   pay(powerUp);
-  powerUp.apply(state);
-  state.notice = `${powerUp.name}! ${powerUp.help}`;
+  if (id === 'veto') {
+    const vetoedId = state.rules[state.newestCategory].ruleId;
+    powerUp.apply(state);
+    const restored = getRule(state.rules[getRule(vetoedId).category].ruleId);
+    state.notice = `Vetoed "${getRule(vetoedId).name}". Back to "${restored.name}".`;
+    state.ottoSays = say('vetoed');
+    highlightRule(restored.id);
+    showStamp('VETOED!');
+  } else {
+    powerUp.apply(state);
+    state.notice = `${powerUp.name}! ${powerUp.help}`;
+  }
   afterPowerUp(powerUp);
 }
 
@@ -212,6 +303,24 @@ function chooseOwnLine(type) {
   emit('change');
 }
 
+// Amendment: the player picked one of the 3 rule cards.
+function chooseAmendment(ruleId) {
+  if (state.mode?.type !== 'amend' || !state.mode.cards.includes(ruleId)) return;
+  const powerUp = getPowerUp('amendment');
+  const cards = state.mode.cards;
+  state.mode = null;
+  pay(powerUp);
+  powerUp.apply(state, ruleId);
+  state.lastRuleChange = { ruleId, rejected: cards.filter((id) => id !== ruleId), by: 'player' };
+  state.nextRuleAt = state.playerTurns + RULE_EVERY; // Otto's next rewrite waits 4 more turns
+  announceRuleChange(state.lastRuleChange);
+  state.ottoSays = say('amended');
+  if (addFrustration(state, 6)) state.ottoSays = say('frustration');
+  startTurnTimer(); // in case the player picked the 5-second timer
+  if (checkMatchEnd('X')) return;
+  emit('change');
+}
+
 function cancelMode() {
   if (!state.mode || state.mode.type === 'ownLinePlace') return; // already paid: can't cancel
   state.mode = null;
@@ -222,6 +331,7 @@ function cancelMode() {
 // Which power-up started a mode?
 function modeOwner(mode) {
   if (mode.type === 'flick') return 'flick';
+  if (mode.type === 'amend') return 'amendment';
   return 'myOwnLine';
 }
 
@@ -240,21 +350,75 @@ function afterPowerUp(powerUp) {
       earn(POINTS.quickCounter);
       delete state.cheatLandedAt[cheatId]; // only once per cheat
     }
-    state.ottoSays = say('cheatCountered');
-    if (state.round >= 2 && addFrustration(state, 8)) state.ottoSays = say('frustration');
+    if (powerUp.id !== 'veto') state.ottoSays = say('cheatCountered');
+    if (state.era === 'modern' && addFrustration(state, 8)) state.ottoSays = say('frustration');
   }
-  if (checkRoundEnd()) return; // e.g. Glue Stick gave back a winning X
+  if (checkMatchEnd('X')) return; // e.g. Glue Stick or Veto gave the player a line
   emit('change');
+}
+
+// --- Rule changes ------------------------------------------------------------------
+
+// Light up the squares a rule affects for 2 seconds.
+function highlightRule(ruleId) {
+  const highlight = { cells: affectedSquares(state, ruleId) };
+  state.highlight = highlight;
+  setTimeout(() => {
+    if (state.highlight === highlight) {
+      state.highlight = null;
+      emit('change');
+    }
+  }, HIGHLIGHT_MS);
+}
+
+// Show a rule change: Otto's comment, the notice, the stamp and the highlight.
+function announceRuleChange(change) {
+  const rule = getRule(change.ruleId);
+  const rejected = change.rejected.map((id) => `"${getRule(id).name}"`).join(' and ');
+  const who = change.by === 'player' ? 'You picked' : 'New rule';
+  state.ottoSays = sayRule(change.ruleId);
+  state.notice = `${who}: ${rule.name}. ${rule.sentence}` + (rejected ? ` (Not chosen: ${rejected}.)` : '');
+  highlightRule(change.ruleId);
+  emit('change');
+  showStamp('NEW RULE!');
+}
+
+// Otto's regular rewrite: the Rule Book shakes, Otto picks a rule, everyone reads it.
+// Returns false if the match was reset meanwhile.
+async function scheduledRuleChange() {
+  state.nextRuleAt = state.playerTurns + RULE_EVERY;
+  state.ruleTelegraph = true;
+  state.ottoSays = say('ruleTelegraph');
+  emit('change');
+  if (!(await pause(RULE_TELEGRAPH_MS))) return false;
+
+  state.ruleTelegraph = false;
+  const change = ottoRewriteRules(state);
+  if (!change) {
+    emit('change');
+    return true;
+  }
+  announceRuleChange(change);
+  return pause(RULE_READ_MS);
 }
 
 // --- Otto's turn -------------------------------------------------------------
 
-function ottoTurn() {
+async function ottoTurn() {
+  if (!(await pause(OTTO_THINK_MS))) return;
   state.turnNumber++;
   tickCooldowns(state);
   if (state.spinBlockedTurns > 0) state.spinBlockedTurns--;
 
-  // Time Out (a Milestone 3 power-up) makes Otto skip a turn.
+  // Every 4 player turns, Otto rewrites a rule. (The first time, it also realises
+  // the classic game is solved and peels away the 1952 screen.)
+  if (state.playerTurns >= state.nextRuleAt) {
+    if (state.era === '1952' && !(await leave1952())) return;
+    if (!(await scheduledRuleChange())) return;
+    if (checkMatchEnd(null)) return;
+  }
+
+  // Time Out makes Otto skip a turn.
   if (state.ottoSkipsNextTurn) {
     state.ottoSkipsNextTurn = false;
     state.ottoSays = say('skipTurn');
@@ -263,21 +427,29 @@ function ottoTurn() {
   }
 
   const cheat = pickCheat(state);
-  if (!cheat) {
-    ottoNormalMove();
-    return;
+  if (cheat) {
+    // Telegraph: Otto wobbles and says "hehe…". The player can click Otto now.
+    state.telegraph = cheat.id;
+    state.ottoSays = say(cheat.id === 'rewriteRules' ? 'ruleTelegraph' : 'telegraph');
+    emit('change');
+    if (!(await pause(TELEGRAPH_MS))) return;
+
+    if (state.telegraph === cheat.id) {
+      state.telegraph = null;
+      runCheat(cheat);
+      if (state.matchOver) return;
+      if (cheat.replacesMove) {
+        endOttoTurn(); // the cheat already placed Otto's mark(s)
+        return;
+      }
+      if (!(await pause(cheat.id === 'rewriteRules' ? RULE_READ_MS : OTTO_THINK_MS))) return;
+    } else {
+      // The player caught it: Otto has to play fair this turn.
+      if (!(await pause(OTTO_THINK_MS + 300))) return;
+    }
   }
 
-  // Telegraph: Otto wobbles and says "hehe…". The player can click Otto now.
-  state.telegraph = cheat.id;
-  state.ottoSays = say('telegraph');
-  emit('change');
-
-  later(TELEGRAPH_MS, () => {
-    if (state.telegraph !== cheat.id) return; // the player caught it
-    state.telegraph = null;
-    runCheat(cheat);
-  });
+  ottoNormalMove();
 }
 
 // The player clicked Otto (or pressed C).
@@ -294,8 +466,6 @@ function catchCheat() {
   earn(POINTS.catchCheat);
   emit('change');
   showStamp('CAUGHT!');
-
-  later(OTTO_THINK_MS + 300, ottoNormalMove); // a caught Otto has to play fair
 }
 
 function runCheat(cheat) {
@@ -305,133 +475,179 @@ function runCheat(cheat) {
   state.cheatLandedAt[cheat.id] = state.turnNumber;
   if (cheat.id === 'boardSpin') state.spinsToUndo++;
   state.stats.cheatsUsed++;
-  state.ottoSays = say('cheatSucceeds');
-  state.notice = `Otto cheated: ${cheat.name}! ${cheat.description}`;
+
+  if (cheat.id === 'rewriteRules') {
+    announceRuleChange(state.lastRuleChange);
+    state.notice = `Otto cheated: rewrote a rule early! ` + state.notice;
+  } else {
+    state.ottoSays = say('cheatSucceeds');
+    state.notice = `Otto cheated: ${cheat.name}! ${cheat.description}`;
+  }
   emit('change');
   if (cheat.id === 'boardSpin') spinBoardEffect();
 
-  if (checkRoundEnd()) return;
-
-  if (cheat.replacesMove) endOttoTurn(); // the cheat already placed Otto's mark(s)
-  else later(OTTO_THINK_MS, ottoNormalMove);
+  checkMatchEnd('O');
 }
 
 function ottoNormalMove() {
-  const index = chooseMove(state);
-  if (index === undefined) return; // no squares left (shouldn't happen)
-  state.board.cells[index] = 'O';
-  if (checkRoundEnd()) return;
+  const landing = chooseMove(state);
+  if (landing !== undefined) placeMove(state, landing, 'O');
+  if (checkMatchEnd('O')) return;
   endOttoTurn();
 }
 
 function endOttoTurn() {
   state.turn = 'X';
   emit('change');
+  startTurnTimer();
 }
 
-// --- Round / match end -------------------------------------------------------
+// --- Win / board full / final rule -----------------------------------------------------
 
-// Check for a win or a draw. Returns true if the round just ended.
-function checkRoundEnd() {
-  const winner = findWinner(state.board);
-
-  if (winner) {
-    state.roundResult = winner.mark;
-    state.winLine = winner.line;
-    if (winner.mark === 'X') {
-      state.score.player++;
-      earn(POINTS.winRound);
-      addFrustration(state, 20);
-      state.ottoSays = say('roundLost');
-    } else {
-      state.score.otto++;
-      addFrustration(state, -25); // winning calms Otto down
-      state.ottoSays = say('roundWon');
-    }
-  } else if (isFull(state.board)) {
-    state.roundResult = 'draw'; // draws give nobody a round win
-    if (state.round >= 2) addFrustration(state, 15);
-    state.ottoSays = say('draw');
-  } else {
-    return false; // game continues
+// Check whether the match is over after `mover` ('X', 'O' or null) did something.
+// Returns true if it ended.
+function checkMatchEnd(mover) {
+  const lines = { X: lineFor(state, 'X'), O: lineFor(state, 'O') };
+  if (lines.X || lines.O) {
+    // The mover's own line counts first (a move can sometimes make lines for both).
+    const maker = mover && lines[mover] ? mover : lines.X ? 'X' : 'O';
+    // Reverse day: making a line LOSES.
+    const winner = isReverseDay(state) ? other(maker) : maker;
+    endMatch(winner, lines[maker].line);
+    return true;
   }
 
-  state.roundOver = true;
+  // At 9x9 the FINAL RULE decides.
+  if (state.board.rows >= MAX_BOARD && state.board.cols >= MAX_BOARD) {
+    finalRule();
+    return true;
+  }
+
+  // Board full: Otto is forced to add a row or column.
+  if (emptyCells(state.board).length === 0) {
+    if (state.board.rows <= state.board.cols) addRow(state.board);
+    else addColumn(state.board);
+    state.ottoSays = say('outOfRoom');
+    state.notice = 'The board is full, so Otto had to add more board.';
+    addFrustration(state, 10);
+    if (state.board.rows >= MAX_BOARD && state.board.cols >= MAX_BOARD) {
+      finalRule();
+      return true;
+    }
+  }
+  return false;
+}
+
+// FINAL RULE: count every line of 3 (overlapping lines count too). Most lines wins.
+function finalRule() {
+  const xLines = linesOf(state.board, 'X', LINE_LENGTH);
+  const oLines = linesOf(state.board, 'O', LINE_LENGTH);
+  state.finalRule = { x: xLines.length, o: oLines.length };
+  const winner = xLines.length > oLines.length ? 'X' : oLines.length > xLines.length ? 'O' : 'draw';
+  const winnerLines = winner === 'X' ? xLines : winner === 'O' ? oLines : [...xLines, ...oLines];
+  endMatch(winner, [...new Set(winnerLines.flat())]);
+  state.ottoSays = say('finalRule');
+  state.notice = `FINAL RULE: most lines of 3 wins. You ${xLines.length} – ${oLines.length} Otto.`;
+  emit('change');
+  showStamp('FINAL RULE!');
+}
+
+function endMatch(winner, line) {
+  stopTurnTimer();
+  state.matchOver = true;
+  state.result = winner;
+  state.winLine = line;
   state.telegraph = null;
+  state.ruleTelegraph = false;
   state.mode = null;
   state.lightsOut = null; // lights back on so the player can see the result
 
-  // Did someone just win the whole match?
-  if (state.score.player >= ROUNDS_TO_WIN) {
-    state.matchOver = true;
+  if (winner === 'X') {
+    earn(POINTS.winMatch);
+    if (soonAfterRuleChange()) earn(POINTS.ruleBonus);
     state.ottoSays = say('meltdown');
-  } else if (state.score.otto >= ROUNDS_TO_WIN) {
-    state.matchOver = true;
+  } else if (winner === 'O') {
     state.ottoSays = say('matchWon');
+  } else {
+    state.ottoSays = say('draw');
   }
+  if (isReverseDay(state) && !state.finalRule) {
+    state.notice = `Reverse day! Making a line LOSES, so ${winner === 'X' ? 'you win' : 'Otto wins'}.`;
+  }
+  emit('change');
+}
 
+// --- The 1952 opening -------------------------------------------------------------------
+
+// Otto realises tic-tac-toe is solved, and the old 1952 screen glitches and
+// peels away like a sticker, revealing the sticker-scrapbook world.
+// Returns false if the match was reset meanwhile.
+async function leave1952() {
+  state.transitioning = true;
+  state.ottoSays = say('solved');
+  emit('change'); // Otto says it on the old screen first
+  if (!(await pause(SOLVED_PAUSE_MS))) return false;
+
+  // 1. Copy the old screen over the page, 2. switch the real page underneath...
+  const sheet = createPeelSheet(document.getElementById('app'));
+  state.era = 'modern';
+  addFrustration(state, Math.max(0, 20 - state.frustration)); // Otto starts out bored
+  emit('change');
+
+  // 3. ...then glitch and peel the copy away.
+  const myGeneration = generation;
+  await sheet.play();
+  if (myGeneration !== generation) return false;
+  state.transitioning = false;
   emit('change');
   return true;
 }
 
-function startRound(roundNumber) {
-  generation++; // cancel any of Otto's pending timers
-  if (state.era === '1952') {
-    leave1952(roundNumber);
-    return;
-  }
-  state.round = roundNumber;
-  resetRound();
-  state.ottoSays = say('matchStart');
-  emit('change');
-}
-
-// After round 1: Otto realises tic-tac-toe is solved, and the old 1952 screen
-// glitches and peels away like a sticker, revealing the sticker-scrapbook world.
-function leave1952(roundNumber) {
-  state.transitioning = true;
-  state.ottoSays = say('solved');
-  emit('change'); // Otto says it on the old screen first
-
-  later(SOLVED_PAUSE_MS, () => {
-    // 1. Take a copy of the old screen and lay it over the page...
-    const sheet = createPeelSheet(document.getElementById('app'));
-
-    // 2. ...switch the real page to the new world underneath it...
-    state.era = 'modern';
-    state.round = roundNumber;
-    resetRound();
-    addFrustration(state, Math.max(0, 20 - state.frustration)); // Otto starts out bored
-    emit('change');
-
-    // 3. ...then glitch and peel the copy away.
-    const myGeneration = generation;
-    sheet.play().then(() => {
-      if (myGeneration !== generation) return; // a new match started meanwhile
-      state.transitioning = false;
-      emit('change');
-    });
-  });
-}
-
 function playAgain() {
-  generation++;
+  generation++; // stops any of Otto's unfinished turns
+  stopTurnTimer();
   resetMatch();
   state.ottoSays = say('matchStart');
   emit('change');
 }
 
 // --- Debug panel (open the game with ?debug in the URL) -----------------------
-function debugAction(action, value) {
+async function debugAction(action, value) {
   if (state.transitioning) return;
   state.debug.message = '';
+
   if (action === 'force') {
     state.debug.forceCheat = value;
     state.debug.message = `Otto will try ${getCheat(value).name} on its next turn.`;
-  } else if (action === 'round2') {
-    if (state.matchOver) resetMatch();
-    startRound(Math.max(2, state.round));
+  } else if (action === 'skipIntro') {
+    if (state.era === '1952') {
+      generation++; // cancel Otto's pending turn; it's the player's go afterwards
+      state.turn = 'X';
+      await leave1952();
+    }
     return;
+  } else if (action === 'rule') {
+    // Switch on a specific rule right now.
+    if (state.matchOver || getRuleIsActive(value)) {
+      state.debug.message = `${getRule(value).name} is already active (or the match is over).`;
+    } else {
+      activateRule(state, value);
+      state.lastRuleChange = { ruleId: value, rejected: [], by: 'debug' };
+      announceRuleChange(state.lastRuleChange);
+      startTurnTimer();
+      checkMatchEnd(null);
+      return;
+    }
+  } else if (action === 'ruleNow') {
+    state.nextRuleAt = state.playerTurns; // Otto rewrites a rule on its next turn
+    state.debug.message = 'Otto will rewrite a rule on its next turn.';
+  } else if (action === 'grow') {
+    if (state.board.rows < MAX_BOARD) addRow(state.board);
+    if (state.board.cols < MAX_BOARD) addColumn(state.board);
+    checkMatchEnd(null);
+  } else if (action === 'turn29') {
+    state.playerTurns = Math.max(state.playerTurns, MAX_TURNS - 1);
+    state.debug.message = `It's now turn ${currentTurn(state)}. Your next move triggers the FINAL RULE.`;
   } else if (action === 'frustration') {
     addFrustration(state, 25);
   } else if (action === 'calm') {
@@ -444,15 +660,20 @@ function debugAction(action, value) {
   emit('change');
 }
 
+function getRuleIsActive(ruleId) {
+  const rule = getRule(ruleId);
+  return state.rules[rule.category].ruleId === ruleId;
+}
+
 // --- Boot ------------------------------------------------------------------
 initRender(document.getElementById('app'), {
-  onCellClick: onCellClick,
+  onCellClick,
   onCatch: catchCheat,
+  onPlayAgain: playAgain,
   onPowerUp: activatePowerUp,
   onOwnLineChoice: chooseOwnLine,
+  onAmend: chooseAmendment,
   onCancel: cancelMode,
-  onNextRound: () => startRound(state.round + 1),
-  onPlayAgain: playAgain,
   onDebug: debugAction,
 });
 on('change', () => emit('render'));

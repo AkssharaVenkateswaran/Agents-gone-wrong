@@ -200,6 +200,79 @@ export const POWERUP_ICONS = {
   doubleMark: () => sticker('icon', '0 0 60 60', `
     <g transform="translate(-6 -4) scale(0.5)">${chunky((a) => `<polygon points="${X_POINTS}" ${a} />`, C.teal, C.tealShade)}</g>
     <g transform="translate(18 18) scale(0.5)">${chunky((a) => `<polygon points="${X_POINTS}" ${a} />`, C.teal, C.tealShade)}</g>`),
+  // A rubber stamp saying NO.
+  veto: () => sticker('icon', '0 0 60 60', `
+    ${chunky((a) => `<rect x="20" y="4" width="20" height="20" rx="6" ${a} />`, C.coral, C.coralShade, 1, 3)}
+    ${chunky((a) => `<rect x="8" y="26" width="44" height="14" rx="4" ${a} />`, C.coral, C.coralShade, 1, 3)}
+    ${chunky((a) => `<rect x="6" y="42" width="48" height="12" rx="3" ${a} />`, C.white, C.grey, 1, 2)}
+    <text x="30" y="52" text-anchor="middle" font-family="Permanent Marker, cursive" font-size="10" fill="${C.coral}">NO</text>`),
+  // Three fanned-out rule cards.
+  amendment: () => sticker('icon', '0 0 60 60', `
+    <g transform="rotate(-18 30 46)">${chunky((a) => `<rect x="17" y="10" width="26" height="36" rx="4" ${a} />`, C.sky, C.skyShade, 1, 2)}</g>
+    <g transform="rotate(16 30 46)">${chunky((a) => `<rect x="17" y="10" width="26" height="36" rx="4" ${a} />`, C.green, C.greenShade, 1, 2)}</g>
+    ${chunky((a) => `<rect x="17" y="12" width="26" height="36" rx="4" ${a} />`, C.white, C.grey, 1, 2)}
+    <path d="M22 22 h16 M22 29 h16 M22 36 h10" ${OUTLINE} fill="none" stroke-width="2.5" />`),
+};
+
+// --- Rule icons (for the Rule Book) -----------------------------------------------------
+// A small sticker for every rule.
+const tile = (inner, fill = C.white) =>
+  sticker('icon', '0 0 60 60', `${chunky((a) => `<rect x="7" y="7" width="44" height="44" rx="8" ${a} />`, fill, C.grey, 2, 3)}${inner}`);
+const numberBadge = (n) =>
+  sticker('icon', '0 0 60 60', `
+    ${chunky((a) => `<circle cx="29" cy="28" r="22" ${a} />`, C.yellow, C.yellowShade, 1, 3)}
+    <text x="29" y="38" text-anchor="middle" font-family="Permanent Marker, cursive" font-size="28" fill="${INK}">${n}</text>`);
+
+export const RULE_ICONS = {
+  three: () => numberBadge(3),
+  four: () => numberBadge(4),
+  five: () => numberBadge(5),
+  // A diagonal line with a "no" sign over it.
+  noDiagonals: () => tile(`
+    <path d="M16 42 L42 16" ${OUTLINE} fill="none" stroke-width="4" />
+    <circle cx="29" cy="29" r="15" fill="none" stroke="${C.coral}" stroke-width="5" />
+    <path d="M18 40 L40 18" stroke="${C.coral}" stroke-width="5" stroke-linecap="round" />`),
+  // A bold diagonal arrow.
+  onlyDiagonals: () => tile(`
+    <path d="M16 42 L40 18 M28 17 h12 v12" fill="none" stroke="${C.teal}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />`),
+  // A little 2x2 grid: play anywhere.
+  anywhere: () => tile(`
+    <path d="M29 13 V45 M13 29 H45" ${OUTLINE} fill="none" stroke-width="3" />`),
+  // An arrow falling onto the ground.
+  gravity: () => sticker('icon', '0 0 60 60', `
+    ${chunky((a) => `<path d="M22 6 h14 v20 h10 l-17 18 l-17 -18 h10 z" ${a} />`, C.sky, C.skyShade, 1, 3)}
+    ${chunky((a) => `<rect x="6" y="48" width="46" height="7" rx="3" ${a} />`, C.green, C.greenShade, 1, 2)}`),
+  // A tile with hot corners.
+  lava: () => tile(`
+    <path d="M7 7 h14 l-14 14 z M51 7 v14 l-14 -14 z M7 51 v-14 l14 14 z M51 51 h-14 l14 -14 z" fill="${C.coral}" ${OUTLINE} stroke-width="2.5" />
+    <path d="M29 20 q8 8 3 14 q-3 4 -6 0 q-4 -6 3 -14 z" fill="${C.yellow}" ${OUTLINE} stroke-width="2" />`),
+  // Two marks touching.
+  touch: () => sticker('icon', '0 0 60 60', `
+    ${chunky((a) => `<circle cx="20" cy="30" r="13" ${a} />`, C.teal, C.tealShade, 1, 3)}
+    ${chunky((a) => `<circle cx="40" cy="30" r="13" ${a} />`, C.coral, C.coralShade, 1, 3)}`),
+  // A plain star: nothing weird.
+  noTwist: () => sticker('icon', '0 0 60 60',
+    chunky((a) => `<path d="M30 6 l7 15 l16 2 l-12 11 l3 16 l-14 -8 l-14 8 l3 -16 l-12 -11 l16 -2 z" ${a} />`, C.grey, C.greyShade, 1, 3)),
+  // A faint, dashed X.
+  fade: () => tile(`
+    <g opacity="0.4" transform="translate(4 4) scale(0.5)"><polygon points="${X_POINTS}" fill="${C.teal}" ${OUTLINE} stroke-dasharray="6 5" /></g>`),
+  // Two triangles facing a dashed mirror.
+  mirror: () => tile(`
+    <path d="M29 11 V47" stroke="${INK}" stroke-width="2.5" stroke-dasharray="4 4" />
+    <path d="M24 18 v22 l-11 -11 z" fill="${C.teal}" ${OUTLINE} stroke-width="2.5" />
+    <path d="M34 18 v22 l11 -11 z" fill="${C.teal}" ${OUTLINE} stroke-width="2.5" opacity="0.55" />`),
+  // A stopwatch.
+  timer: () => sticker('icon', '0 0 60 60', `
+    ${chunky((a) => `<rect x="24" y="3" width="12" height="7" rx="2" ${a} />`, C.grey, C.greyShade, 1, 2)}
+    ${chunky((a) => `<circle cx="30" cy="33" r="21" ${a} />`, C.yellow, C.yellowShade, 1, 3)}
+    <circle cx="30" cy="33" r="14" fill="${C.white}" ${OUTLINE} stroke-width="2.5" />
+    <path d="M30 33 V23 M30 33 l6 4" ${OUTLINE} fill="none" stroke-width="3" />`),
+  // Two arrows chasing each other.
+  reverse: () => sticker('icon', '0 0 60 60', `
+    <path d="M14 26 a16 16 0 0 1 30 -6" fill="none" stroke="${C.coral}" stroke-width="6" stroke-linecap="round" />
+    <path d="M46 10 l-1 12 l-11 -4 z" fill="${C.coral}" ${OUTLINE} stroke-width="2" />
+    <path d="M46 34 a16 16 0 0 1 -30 6" fill="none" stroke="${C.teal}" stroke-width="6" stroke-linecap="round" />
+    <path d="M14 50 l1 -12 l11 4 z" fill="${C.teal}" ${OUTLINE} stroke-width="2" />`),
 };
 
 // --- Hand-drawn lines ---------------------------------------------------------------

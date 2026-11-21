@@ -1,20 +1,30 @@
 // board.js
 // The grid model, win detection, minimax, and helpers to grow / shrink / spin the grid.
 //
-// A board is a plain object: { rows, cols, cells, minions, stolen, glued }
+// A board is a plain object: { rows, cols, cells, minions, stolen, glued, age }
 //   Every "layer" is a flat array with one entry per square (length rows * cols).
 //   The square at (row, col) is stored at index row * cols + col.
 //     cells[i]   -> null (empty), 'X' or 'O'
 //     minions[i] -> true if a minion sticker is sitting on that square (blocked)
 //     stolen[i]  -> true if Otto repainted the player's X into an O here
 //     glued[i]   -> true if the player glued their X here (Otto can't steal it)
+//     age[i]     -> the player-turn number when the mark here was placed (for "fading ink")
 //   Keeping everything in parallel arrays means that when the grid grows or
 //   spins, ALL the information moves together and nothing gets out of sync.
 
-export const LINE_LENGTH = 3; // how many in a row you need to win
+export const LINE_LENGTH = 3; // the classic rule: 3 in a row wins
 
-const LAYERS = ['cells', 'minions', 'stolen', 'glued'];
-const BLANK = { cells: null, minions: false, stolen: false, glued: false }; // value of a fresh square
+// The 4 directions a line can run in. Rules can switch some of them off.
+export const DIRECTIONS = {
+  h: [0, 1],   // horizontal  →
+  v: [1, 0],   // vertical    ↓
+  d1: [1, 1],  // diagonal    ↘
+  d2: [1, -1], // diagonal    ↙
+};
+export const ALL_DIRECTIONS = ['h', 'v', 'd1', 'd2'];
+
+const LAYERS = ['cells', 'minions', 'stolen', 'glued', 'age'];
+const BLANK = { cells: null, minions: false, stolen: false, glued: false, age: null }; // value of a fresh square
 
 export function createBoard(rows, cols) {
   const board = { rows, cols };
@@ -57,46 +67,53 @@ export function lineCells(board, type, index) {
 
 // --- Win detection (works on ANY grid size) ------------------------------
 
-// Every possible "3 in a row" on the grid, as lists of 3 square indexes.
-// From every square we look in 4 directions:
-//   right (0,1), down (1,0), down-right (1,1) and down-left (1,-1).
-export function allLines(board) {
+// Every possible line of `length` squares on the grid, as lists of square indexes.
+// From every square we look in each allowed direction (see DIRECTIONS).
+export function allLines(board, length = LINE_LENGTH, directions = ALL_DIRECTIONS) {
   const { rows, cols } = board;
-  const directions = [
-    [0, 1],
-    [1, 0],
-    [1, 1],
-    [1, -1],
-  ];
   const lines = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      for (const [dr, dc] of directions) {
+      for (const name of directions) {
+        const [dr, dc] = DIRECTIONS[name];
         const line = [];
-        for (let step = 0; step < LINE_LENGTH; step++) {
+        for (let step = 0; step < length; step++) {
           const rr = r + dr * step;
           const cc = c + dc * step;
           if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) break; // off the grid
           line.push(rr * cols + cc);
         }
-        if (line.length === LINE_LENGTH) lines.push(line);
+        if (line.length === length) lines.push(line);
       }
     }
   }
   return lines;
 }
 
-// Returns { mark: 'X' | 'O', line: [i1, i2, i3] } or null if nobody has won.
+// Find a completed line for `mark` (or for either mark if `mark` is null).
+// Returns { mark, line: [indexes] } or null.
 // Minion squares are always empty (null), so they never count toward a line.
-export function findWinner(board) {
-  for (const line of allLines(board)) {
-    const mark = board.cells[line[0]];
-    if (mark && line.every((i) => board.cells[i] === mark)) return { mark, line };
+export function findLine(board, mark = null, length = LINE_LENGTH, directions = ALL_DIRECTIONS) {
+  for (const line of allLines(board, length, directions)) {
+    const first = board.cells[line[0]];
+    if (!first || (mark && first !== mark)) continue;
+    if (line.every((i) => board.cells[i] === first)) return { mark: first, line };
   }
   return null;
 }
 
-// If `mark` can win right now, return that square's index. Otherwise -1.
+// The classic check (3 in a row, any direction) — used by minimax on 3x3.
+export function findWinner(board) {
+  return findLine(board);
+}
+
+// All the separate lines of `length` a mark has (overlapping ones count too,
+// so 4 in a row = 2 lines of 3). Used by the FINAL RULE.
+export function linesOf(board, mark, length = LINE_LENGTH) {
+  return allLines(board, length).filter((line) => line.every((i) => board.cells[i] === mark));
+}
+
+// If `mark` can win right now (classic rules), return that square's index. Otherwise -1.
 export function findWinningMove(board, mark, candidates = emptyCells(board)) {
   for (const i of candidates) {
     board.cells[i] = mark; // try it...
@@ -153,56 +170,6 @@ export function bestMove(board, mark) {
     }
   }
   return pickRandom(bestIndexes);
-}
-
-// With perfect play from here, who wins? ('X', 'O' or 'draw')
-// `toMove` is whose turn it is. Only used on 3x3 (too slow on big grids).
-export function perfectPlayResult(board, toMove) {
-  const score = minimax(cloneBoard(board), 'O', toMove, 0);
-  if (score > 0) return 'O';
-  if (score < 0) return 'X';
-  return 'draw';
-}
-
-// --- Simple heuristic (used when the grid is bigger than 3x3) ------------
-// 1. win if possible  2. block if needed  3. take the best open square.
-// `candidates` lets callers limit which squares may be chosen.
-export function heuristicMove(board, mark, candidates = emptyCells(board)) {
-  const other = mark === 'X' ? 'O' : 'X';
-
-  const win = findWinningMove(board, mark, candidates);
-  if (win !== -1) return win;
-
-  const block = findWinningMove(board, other, candidates);
-  if (block !== -1) return block;
-
-  // Score each square: every possible line through it that the opponent
-  // hasn't blocked is worth 1 point, plus 3 more per mark of ours already in it.
-  let bestScore = -1;
-  let bestIndexes = [];
-  for (const i of candidates) {
-    let score = 0;
-    for (const line of allLines(board)) {
-      if (!line.includes(i)) continue;
-      const blocked = line.some((j) => board.cells[j] === other || board.minions[j]);
-      if (blocked) continue;
-      const mine = line.filter((j) => board.cells[j] === mark).length;
-      score += 1 + mine * 3;
-    }
-    if (score > bestScore) {
-      bestScore = score;
-      bestIndexes = [i];
-    } else if (score === bestScore) {
-      bestIndexes.push(i);
-    }
-  }
-  return pickRandom(bestIndexes);
-}
-
-// Otto's "best" move on any board: perfect minimax on 3x3, heuristic otherwise.
-export function smartMove(board, mark) {
-  if (board.rows === 3 && board.cols === 3) return bestMove(board, mark);
-  return heuristicMove(board, mark);
 }
 
 // --- Growing, shrinking and spinning the grid ----------------------------

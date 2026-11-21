@@ -20,14 +20,12 @@ import {
   rotateAnticlockwise,
   lineCells,
   emptyCells,
-  findWinner,
-  findWinningMove,
-  heuristicMove,
-  smartMove,
   pickRandom,
 } from './board.js';
+import { MAX_BOARD, putMark, placeMove, lineFor, vetoNewest, drawRules } from './rules.js';
+import { ottoMove, bestSquareAmong, findWinningSquare, ottoRewriteRules } from './ai.js';
 
-export const MAX_GRID_SIZE = 5;        // Extra Line won't grow the grid past 5x5
+export const MAX_GRID_SIZE = MAX_BOARD; // Extra Line won't grow the grid past 9x9
 export const LIGHTS_OUT_TURNS = 3; // Lights Out lasts this many player turns
 
 export const CHEATS = [
@@ -68,8 +66,8 @@ export const CHEATS = [
       state.addedLines.push({ owner: 'O', type, index });
 
       // Put an O on the best square of the new line.
-      const target = heuristicMove(board, 'O', lineCells(board, type, index));
-      board.cells[target] = 'O';
+      const target = bestSquareAmong(state, lineCells(board, type, index));
+      if (target !== undefined) putMark(state, target, 'O');
     },
     undo(state) {
       // Remove the most recent line Otto added (with all its marks).
@@ -92,7 +90,7 @@ export const CHEATS = [
       const count = state.frustration >= 50 ? 2 : 1; // angrier Otto throws more
       for (let n = 0; n < count; n++) {
         // Petty: if the player could win somewhere, sit a minion right there.
-        let target = findWinningMove(board, 'X');
+        let target = findWinningSquare(state, 'X');
         if (target === -1) target = pickRandom(emptyCells(board));
         board.minions[target] = true;
       }
@@ -121,15 +119,15 @@ export const CHEATS = [
       // Prefer a steal that wins Otto the game on the spot.
       let target = xSquares.find((i) => {
         board.cells[i] = 'O';
-        const win = findWinner(board);
+        const win = lineFor(state, 'O');
         board.cells[i] = 'X';
-        return win && win.mark === 'O';
+        return !!win;
       });
       // Otherwise steal the X that is most useful to Otto.
       if (target === undefined) {
-        xSquares.forEach((i) => (board.cells[i] = null)); // pretend they're empty...
-        target = heuristicMove(board, 'O', xSquares);     // ...pick the best one...
-        xSquares.forEach((i) => (board.cells[i] = 'X'));  // ...and put them back
+        xSquares.forEach((i) => (board.cells[i] = null));  // pretend they're empty...
+        target = bestSquareAmong(state, xSquares);          // ...pick the best one...
+        xSquares.forEach((i) => (board.cells[i] = 'X'));   // ...and put them back
       }
 
       board.cells[target] = 'O';
@@ -156,11 +154,11 @@ export const CHEATS = [
     replacesMove: true,
     canUse: (state) => emptyCells(state.board).length >= 2,
     apply(state) {
-      const board = state.board;
-      board.cells[smartMove(board, 'O')] = 'O';
-      // Only take the second move if the first one didn't already win.
-      if (!findWinner(board) && emptyCells(board).length > 0) {
-        board.cells[smartMove(board, 'O')] = 'O';
+      // Two normal moves in a row (following the current rules).
+      placeMove(state, ottoMove(state), 'O');
+      // Only take the second move if the first one didn't already make a line.
+      if (!lineFor(state, 'O') && emptyCells(state.board).length > 0) {
+        placeMove(state, ottoMove(state), 'O');
       }
     },
     undo(state) {
@@ -184,6 +182,24 @@ export const CHEATS = [
     },
     undo(state) {
       spinBoard(state, false);
+    },
+  },
+
+  // ---------------------------------------------------------------------
+  // Otto changes a rule early, without waiting for the usual 4 turns.
+  {
+    id: 'rewriteRules',
+    name: 'Rewrite the Rules',
+    description: 'Otto rewrote a rule early. Check the Rule Book!',
+    cooldown: 6,
+    minFrustration: 50,
+    replacesMove: false,
+    canUse: (state) => state.era === 'modern' && drawRules(state).length > 0,
+    apply(state) {
+      ottoRewriteRules(state); // stores the change in state.lastRuleChange
+    },
+    undo(state) {
+      vetoNewest(state); // the counter is Veto
     },
   },
 ];

@@ -1,26 +1,19 @@
 // agent.js
 // Otto's brain: picks normal moves, decides when to cheat, and tracks frustration.
+// (The move-choosing and rule-choosing details live in ai.js.)
 
-import { emptyCells, smartMove, findWinningMove, pickRandom } from './board.js';
+import { pickRandom } from './board.js';
 import { CHEATS, getCheat } from './cheats.js';
-
-export const ROUND1_RANDOM_CHANCE = 0.4; // round 1: 40% of Otto's moves are random
+import { ottoMove, findWinningSquare } from './ai.js';
 
 // Chance Otto cheats on a turn goes from 20% (calm) up to 80% (furious).
 const MIN_CHEAT_CHANCE = 0.2;
 const MAX_CHEAT_CHANCE = 0.8;
 
-// Decide which square Otto (O) plays normally. Returns a cell index.
+// Decide which square Otto (O) plays normally, following the current rules.
+// Returns the square Otto's mark lands on.
 export function chooseMove(state) {
-  const empty = emptyCells(state.board);
-
-  // Round 1: Otto plays fairly but sloppily, so the player can learn (and win).
-  if (state.round === 1 && Math.random() < ROUND1_RANDOM_CHANCE) {
-    return pickRandom(empty);
-  }
-
-  // Otherwise: perfect minimax on 3x3, simple heuristic on a bigger grid.
-  return smartMove(state.board, 'O');
+  return ottoMove(state); // perfect minimax on classic 3x3, heuristic otherwise
 }
 
 // Decide whether Otto cheats this turn. Returns a cheat object, or null.
@@ -35,10 +28,10 @@ export function pickCheat(state) {
     return null;
   }
 
-  if (state.round < 2) return null; // round 1 is played fair
+  if (state.era !== 'modern') return null; // the 1952 opening is played fair
 
   // No need to cheat if a normal move already wins.
-  if (findWinningMove(state.board, 'O') !== -1) return null;
+  if (findWinningSquare(state, 'O') !== -1) return null;
 
   const chance =
     MIN_CHEAT_CHANCE + (MAX_CHEAT_CHANCE - MIN_CHEAT_CHANCE) * (state.frustration / 100);
@@ -72,6 +65,6 @@ export function tickCooldowns(state) {
 export function ottoMood(state) {
   if (state.telegraph) return 'scheming';
   if (state.frustration >= 70) return 'furious';
-  if (state.round >= 2 && state.frustration < 35) return 'bored';
+  if (state.era === 'modern' && state.frustration < 35) return 'bored';
   return 'smug';
 }

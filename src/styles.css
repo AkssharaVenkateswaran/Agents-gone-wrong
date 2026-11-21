@@ -475,6 +475,166 @@ body {
 @keyframes stamp-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
 
 /* ==========================================================================
+   One long match: Rule Book, rule effects on the board, Amendment cards
+   ========================================================================== */
+
+/* Wider page: the board on the left, the Rule Book on the right.
+   On narrow screens the Rule Book drops below the board. */
+.app { max-width: 1020px; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+}
+.hud-value small { font-size: 0.8rem; opacity: 0.7; }
+.tray-buttons { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
+/* --- The Rule Book: a notebook page --- */
+.rulebook {
+  position: relative;
+  margin-top: 22px;
+  padding: 26px 16px 14px 30px;
+  /* faint ruled lines like a notebook, plus a red margin line (an SVG pattern) */
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='28'%3E%3Cpath d='M0 27.5H10' stroke='%23CFE3F5' stroke-width='1'/%3E%3C/svg%3E");
+  border-left-width: 6px;
+}
+.rulebook::before { /* red margin line */
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 18px;
+  border-left: 2px solid rgba(255, 122, 107, 0.45);
+}
+.rulebook-title { position: absolute; top: -12px; left: 18px; font-size: 1rem; }
+.rulebook ul { list-style: none; margin: 0; padding: 0; }
+.rules-active { display: grid; gap: 12px; }
+.rule { position: relative; display: flex; gap: 10px; align-items: flex-start; }
+.rule-icon .sticker { width: 38px; height: 38px; flex: none; }
+.rule-icon { flex: none; }
+.rule-text { display: flex; flex-direction: column; line-height: 1.25; }
+.rule-category { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.65; }
+.rule-text strong { font-family: var(--marker); font-weight: normal; font-size: 1.05rem; }
+.rule-sentence { font-size: 0.88rem; }
+.rule-since { font-size: 0.75rem; opacity: 0.7; }
+.rule.is-new .rule-text strong { color: var(--coral-text); }
+.new-tag { position: absolute; top: -8px; right: -6px; font-size: 0.75rem; transform: rotate(8deg); }
+
+.rule-subhead {
+  display: block;
+  margin: 14px 0 6px;
+  font-family: var(--marker);
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+.rule-rejected li, .rule-history li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 0.88rem;
+}
+.rule-rejected .rule-icon .sticker, .rule-history .rule-icon .sticker { width: 26px; height: 26px; opacity: 0.6; }
+.rule-history small { display: block; font-size: 0.72rem; opacity: 0.7; }
+/* Crossed out with a hand-drawn scribble (the <s> keeps it accessible). */
+.crossed { position: relative; display: inline-block; }
+.crossed s { text-decoration: none; opacity: 0.7; }
+.scribble {
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  top: 50%;
+  width: calc(100% + 6px);
+  height: 12px;
+  transform: translateY(-50%);
+  overflow: visible;
+}
+.scribble path { fill: none; stroke: var(--coral); stroke-width: 3; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+
+/* Before a rule change the Rule Book shakes. */
+.rulebook.shaking { animation: book-shake 0.35s ease-in-out infinite alternate; }
+@keyframes book-shake {
+  from { transform: rotate(-1.5deg) translateX(-3px); }
+  to   { transform: rotate(1.5deg) translateX(3px); }
+}
+
+/* --- Rule effects on the board --- */
+/* Squares a new rule affects glow yellow for 2 seconds. */
+.cell.rule-glow { background: rgba(255, 210, 90, 0.45); outline: 3px dashed var(--yellow); outline-offset: -5px; }
+/* Corners are lava: coral hatching. */
+.cell.lava {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Cpath d='M-2 14L14 -2' stroke='%23FF7A6B' stroke-width='3' opacity='0.55'/%3E%3C/svg%3E");
+  cursor: not-allowed;
+}
+/* Fading ink: older marks get fainter. */
+.cell.fading .sticker { opacity: 0.6; }
+.cell.almost-gone .sticker { opacity: 0.3; }
+/* Mirror: a dashed line down the middle. */
+.grid-mirror { stroke: var(--sky); stroke-width: 5; stroke-dasharray: 14 12; stroke-linecap: round; }
+/* The 5-second timer. */
+.turn-timer {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 8px;
+  border: 2.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--yellow);
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+}
+/* New squares pop in with a bounce when the board grows. */
+.cell.pop-in { animation: pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes pop-in {
+  from { transform: scale(0.3); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+
+/* --- Amendment: pick one of 3 rule cards --- */
+.tray-choice.amend { flex-direction: column; align-items: center; }
+.rule-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; width: 100%; }
+.rule-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.rule-card strong { font-family: var(--marker); font-weight: normal; font-size: 1rem; }
+.rule-card:hover { transform: translateY(-3px) rotate(-1deg); }
+.rule-card:focus-visible { outline: 3px solid var(--teal); outline-offset: 4px; }
+.rule-card .rule-icon .sticker { width: 44px; height: 44px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rulebook.shaking { animation: none; outline: 4px dashed var(--coral); outline-offset: 4px; }
+  .cell.pop-in { animation: fade-in 0.3s ease-out both; }
+  .rule-card:hover { transform: none; }
+}
+
+/* 1952 versions of the new pieces. */
+.era-1952 .rulebook {
+  background: transparent;
+  border-color: var(--phosphor-dim);
+  box-shadow: none;
+  color: var(--phosphor);
+  font-family: var(--mono);
+}
+.era-1952 .rulebook::before { display: none; }
+.era-1952 .rulebook-title { background: var(--crt-bg); padding: 0 6px; }
+.era-1952 :is(.rule-icon, .new-tag) { display: none; }
+.era-1952 .rule-text strong { font-family: var(--mono); font-weight: 700; }
+
+/* ==========================================================================
    1952 look (round 1): tic-tac-toe as it looked on the EDSAC computer's CRT —
    a dark screen, pale phosphor dots, dotted grid lines, monospace text.
    Applied by the `era-1952` class on <body> (and on the peel sheet copy).
