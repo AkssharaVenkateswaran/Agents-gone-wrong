@@ -590,3 +590,23 @@ export function wobblyLine(x1, y1, x2, y2, seed, wobble = 3, segments = 5) {
   }
   return d;
 }
+
+// Music toggle: a pixel music note (crossed out when the music is off).
+export const NOTE_ON = outlined([
+  '...llll',
+  '...l..l',
+  '...l..l',
+  '...l..l',
+  '.lll.ll',
+  'llll.ll',
+  '.ll....',
+]);
+export const NOTE_OFF = outlined([
+  'p..llll',
+  '.p.l..l',
+  '..pl..l',
+  '...p..l',
+  '.lllpll',
+  'llll.pl',
+  '.ll...p',
+]);

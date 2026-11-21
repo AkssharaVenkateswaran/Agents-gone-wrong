@@ -58,6 +58,16 @@ import { say, sayRule, sayFromMemory, sayCatchRate, shout, RAMPAGE_LINES } from 
 import { fetchStats, saveMatch } from './memory.js';
 import { FIRST_MOVES, cleanName } from './matchLog.js';
 import { sfx, setMuted, setDetune, startBuzz, stopBuzz } from './sfx.js';
+import {
+  startMusic,
+  setStage as setMusicStage,
+  setPatience as setMusicPatience,
+  setCalm as setMusicCalm,
+  musicEvent,
+  setMusicEnabled,
+  setMusicMuted,
+  setMusicStageOverride,
+} from './music.js';
 import { initRender, updateTurnTimer, ruleRowPosition } from './ui/render.js';
 import {
   showPopup,
@@ -511,6 +521,7 @@ async function ruleChangeScene() {
   state.lastRuleChange = change;
 
   // 1-2. Show the pop-up; wait for [ OK ] or 4 seconds.
+  musicEvent('ruleChange'); // record scratch, then bass only while the pop-up is open
   state.ruleScene = { phase: 'show', change };
   talk(sayRule(change.ruleId));
   state.notice = '';
@@ -519,7 +530,8 @@ async function ruleChangeScene() {
   await Promise.race([waitForClick(), pause(RULE_AUTO_OK_MS)]);
   if (myGeneration !== generation) return false;
 
-  // 3. Minimise into the Rule Book.
+  // 3. Minimise into the Rule Book (the music comes back on the next downbeat).
+  musicEvent('ruleOk');
   const category = getRule(change.ruleId).category;
   state.ruleScene = { phase: 'minimise', change, target: ruleRowPosition(category) };
   emit('change');
@@ -606,6 +618,7 @@ function catchCheat() {
   earn(POINTS.catchCheat);
   emit('change');
   sfx.caught();
+  musicEvent('cheatCaught');
   showPopup('CAUGHT!');
 }
 
@@ -622,6 +635,7 @@ function runCheat(cheat, trial) {
   state.notice = `Otto cheated: ${cheat.name}! ${cheat.description}`;
   emit('change');
   sfx.cheat();
+  musicEvent('cheat');
   if (cheat.id === 'boardSpin') spinBoardEffect();
   checkRoundEnd('O');
 }
@@ -714,12 +728,14 @@ async function endRound(winner, line, ottoLine) {
     talk(ottoLine || say('roundLost'));
     setTempMood('defeated', 3000);
     sfx.win();
+    musicEvent('roundWonByPlayer');
   } else if (winner === 'O') {
     state.roundsWon.otto++;
     setPatience(state, before + PATIENCE_WON_ROUND);
     talk(ottoLine || say('roundWon'));
     setTempMood('victorious', 3000);
     sfx.lose();
+    musicEvent('roundWonByOtto');
   } else {
     talk(ottoLine || say('draw'));
   }
@@ -744,6 +760,7 @@ async function endRound(winner, line, ottoLine) {
     if (!(await pause(2200))) return;
     state.ending = 'banner';
     state.ottoSays = '...I cheated, obviously.';
+    musicEvent('ottoWinsMatch');
     emit('change');
     return;
   }
@@ -787,8 +804,10 @@ async function startRampage() {
   await rememberMatch('X'); // saved first (gives up after a few seconds if offline)
   if (myGeneration !== generation) return;
 
+  musicEvent('rampage'); // faster and higher as the chaos builds
   const step = async (phase, ms, line) => {
     state.rampage = { phase };
+    if (phase === 'shatter') musicEvent('shatter'); // full distortion as the glass breaks
     if (line !== undefined) state.ottoSays = line;
     emit('change');
     if (phase === 'chaos') spawnFakePopups(6, 'OTTO.EXE HAS STOPPED CARING', Infinity, true); // pop-ups multiply
@@ -813,6 +832,7 @@ async function closeTheGame() {
   window.close();
   if (!(await pause(300))) return;
   state.rampage = { phase: 'crtOff' };   // the screen collapses into a line, then a dot
+  musicEvent('tapeStop');                // ...as the music tape-stops into silence
   emit('change');
   if (!(await pause(1300))) return;
   state.rampage = { phase: 'black' };    // 3 seconds of black
@@ -873,6 +893,9 @@ async function rememberMatch(winner) {
 // Sound detune and the low buzz follow Otto's stage (and Calm mode).
 function updateStageEffects() {
   const now = state.calm ? 0 : stage();
+  setMusicStage(stage());
+  setMusicPatience(state.patience);
+  setMusicCalm(state.calm);
   setDetune([0, 12, 25, 40][now]);
   if (now === 3 && state.screen === 'game' && !state.rampage) startBuzz();
   else stopBuzz();
@@ -890,7 +913,9 @@ function playAgain() {
   resetMatch();
   setPatience(state, 100);
   state.ottoSays = say('matchStart');
+  setMusicStageOverride(null);
   updateStageEffects();
+  startMusic(); // (restarts it after the rampage's tape-stop)
   emit('change');
   loadMemory(); // runs in the background
 }
@@ -899,20 +924,30 @@ function playAgain() {
 const NAME_KEY = 'agents-gone-wrong:name';
 const MUTE_KEY = 'agents-gone-wrong:muted';
 const CALM_KEY = 'agents-gone-wrong:calm';
+const MUSIC_KEY = 'agents-gone-wrong:music-off';
 
 function startGame(rawName) {
   state.playerName = cleanName(rawName) || 'Human';
   remember(NAME_KEY, state.playerName);
   state.screen = 'game';
   sfx.click();
-  playAgain();
+  playAgain(); // starts the music: only now, after the PLAY click (browsers block autoplay)
 }
 
 function toggleMute() {
   state.muted = !state.muted;
   setMuted(state.muted);
+  setMusicMuted(state.muted); // mute turns everything off
   remember(MUTE_KEY, state.muted ? '1' : '');
   updateStageEffects();
+  emit('change');
+}
+
+// The music toggle only switches the music.
+function toggleMusic() {
+  state.musicOn = !state.musicOn;
+  setMusicEnabled(state.musicOn);
+  remember(MUSIC_KEY, state.musicOn ? '' : '1');
   emit('change');
 }
 
@@ -1011,6 +1046,19 @@ function debugAction(action, value) {
       startRampage();
       return;
     }
+  } else if (action === 'musicStage') {
+    setMusicStageOverride(Number(value));
+    state.debug.message = `Music forced to stage ${value} (Play Again to follow patience again).`;
+  } else if (action === 'testScratch') {
+    musicEvent('ruleChange');
+    setTimeout(() => musicEvent('ruleOk'), 2000);
+    state.debug.message = 'Record scratch, bass only for 2 seconds, then back on the next downbeat.';
+  } else if (action === 'testRampageMusic') {
+    musicEvent('rampage');
+    setTimeout(() => musicEvent('shatter'), 4000);
+    setTimeout(() => musicEvent('tapeStop'), 6000);
+    setTimeout(() => startMusic(), 9000);
+    state.debug.message = 'Rampage music: speeds up, distorts, tape-stops, then restarts.';
   } else if (action === 'points') {
     earn(10);
   } else if (action === 'cooldowns') {
@@ -1031,6 +1079,7 @@ initRender(document.getElementById('app'), {
   onCancel: cancelMode,
   onMute: toggleMute,
   onCalm: toggleCalm,
+  onMusic: toggleMusic,
   onSkip: skipRampage,
   onDebug: debugAction,
 });
@@ -1047,6 +1096,9 @@ resetMatch();
 state.playerName = recall(NAME_KEY);
 state.muted = recall(MUTE_KEY) === '1';
 state.calm = recall(CALM_KEY) === '1';
+state.musicOn = recall(MUSIC_KEY) !== '1';
 setMuted(state.muted);
+setMusicMuted(state.muted);
+setMusicEnabled(state.musicOn);
 state.screen = 'title'; // ask for the player's name first
 emit('change');

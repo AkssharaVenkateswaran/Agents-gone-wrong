@@ -46,6 +46,8 @@ import {
   CURSOR_HAND,
   PALETTE,
   MOON_SPRITE,
+  NOTE_ON,
+  NOTE_OFF,
   OTTO_COLOURS,
   OTTO_EXTRAS,
   crackSprite,
@@ -88,6 +90,7 @@ export function initRender(rootElement, callbacks) {
     if (t.closest('#play-again')) handlers.onPlayAgain();
     if (t.closest('#mute')) handlers.onMute();
     if (t.closest('#calm')) handlers.onCalm();
+    if (t.closest('#music')) handlers.onMusic();
     if (t.closest('#skip')) handlers.onSkip();
     const disk = t.closest('[data-powerup]');
     if (disk) {
@@ -379,6 +382,10 @@ function renderTopBar() {
         <button id="calm" class="icon-btn ${state.calm ? 'on' : ''}" aria-pressed="${state.calm}"
                 aria-label="Calm mode: ${state.calm ? 'on' : 'off'} (turns the chaos effects off)" title="Calm mode (no chaos effects)">
           ${sprite(MOON_SPRITE)}
+        </button>
+        <button id="music" class="icon-btn" aria-pressed="${state.musicOn}" title="Music on/off"
+                aria-label="${state.musicOn ? 'Turn the music off' : 'Turn the music on'}">
+          ${sprite(state.musicOn ? NOTE_ON : NOTE_OFF)}
         </button>
         <button id="mute" class="icon-btn" aria-label="${state.muted ? 'Turn sound on' : 'Mute sound'}" aria-pressed="${state.muted}">
           ${sprite(state.muted ? SPEAKER_OFF : SPEAKER_ON)}
@@ -918,6 +925,9 @@ function renderDebug() {
           <button class="debug-btn" data-debug="points">+10 points</button>
           <button class="debug-btn" data-debug="cooldowns">Clear cooldowns</button>
         </div>
+        Music: <div class="debug-row">${[0, 1, 2, 3].map((n) => `<button class="debug-btn" data-debug="musicStage" data-value="${n}">Music stage ${n}</button>`).join('')}
+          <button class="debug-btn" data-debug="testScratch">Test rule-change scratch</button>
+          <button class="debug-btn" data-debug="testRampageMusic">Test rampage music</button></div>
         Otto's mood: <div class="debug-row">${['happy', 'thinking', 'scheming', 'bored', 'defeated', 'victorious', 'glitching']
           .map((mood) => `<button class="debug-btn" data-debug="mood" data-value="${mood}">${mood}</button>`).join('')}</div>
         Rule now: <div class="debug-row">${ruleButtons}</div>

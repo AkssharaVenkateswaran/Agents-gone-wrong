@@ -7,7 +7,8 @@ Tic-tac-toe is a solved game: with perfect play, every game is a draw. The oppon
 - Vite + vanilla JavaScript (ES modules), HTML, CSS. No frontend framework, no game engine.
 - **All art is pixel sprites drawn in code** (see Art direction) — no external image files.
 - Google Fonts: **"Press Start 2P"** (title, score, headings, buttons) and **"VT323"** (all other text).
-- Optional sound effects using the Web Audio API (simple synthesised retro square-wave beeps) — no audio files. A mute button sits in the top bar.
+- Sound effects using the Web Audio API (simple synthesised retro square-wave beeps) — no audio files. A mute button in the top bar turns all sound off.
+- **Background music** (`src/music.js`): original 8-bit chiptune generated live (lead arpeggio, triangle bass, synthesised drums, a soft pad), with a look-ahead scheduler on the AudioContext clock. It starts only after the PLAY click, plays at volume 0.15, pauses when the tab is hidden, and has its own 🎵 toggle (both toggles are remembered). It follows Otto's stage: 96 BPM major (C–Am–F–G) → 112 BPM with hats, snare and a slow wobble → 128 BPM minor (Cm–A♭–Fm–G), bitcrushed lead and stutters → 150 BPM with distortion, F♯ tritones, noise bursts and a tape slowdown every 4th bar. Stage changes crossfade over 2 bars and the tempo creeps up with patience; Calm mode keeps the stage 0/1 arrangement. It reacts to the game: a record scratch and bass-only line while `NEW_RULE.EXE` is open, a duck on cheats, a wah-wah on catches, jingles for round wins, a speed-up, full distortion and a tape-stop to silence during the rampage, and a smug fanfare when Otto wins.
 - Must run with `npm install && npm run dev`, and build to static files with `npm run build`.
 
 Suggested structure:

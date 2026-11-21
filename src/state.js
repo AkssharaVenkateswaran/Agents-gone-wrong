@@ -17,7 +17,8 @@ export const OTTO_ROUNDS_TO_WIN = 3; // Otto wins the match by winning 3 rounds
 export const state = {
   screen: 'title',         // 'title' (enter your name) or 'game'
   playerName: '',          // sent to Otto's memory (max 20 characters)
-  muted: false,            // all sound off
+  muted: false,            // all sound off (music and effects)
+  musicOn: true,           // the music toggle (music only)
   calm: false,             // Calm mode: the "unhinged" chaos effects are switched off
   debug: {
     // (`location` only exists in the browser, not in the test scripts)
