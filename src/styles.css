@@ -1,0 +1,97 @@
+/* styles.css
+   Plain styling for Milestone 1. The full sticker-scrapbook art pass comes in Milestone 4. */
+
+:root {
+  --paper: #fbf6ea;
+  --ink: #1f1d2b;
+  --coral: #ff7a6b;
+  --teal: #2ec4b6;
+  --yellow: #ffd25a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Nunito', system-ui, sans-serif;
+}
+
+#app {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.hud {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 2px solid var(--ink);
+  border-radius: 16px;
+}
+
+.score { font-family: 'Permanent Marker', cursive; font-size: 1.2rem; }
+
+.arena {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.otto { display: flex; align-items: center; gap: 12px; width: 100%; }
+.otto-face { font-size: 3rem; }
+.bubble {
+  flex: 1;
+  min-height: 3em;
+  padding: 10px 14px;
+  background: #fff;
+  border: 2px solid var(--ink);
+  border-radius: 16px;
+}
+
+.board {
+  display: grid;
+  gap: 6px;
+  width: min(100%, 360px);
+  aspect-ratio: 1;
+  background: var(--ink);
+  padding: 6px;
+  border-radius: 12px;
+}
+
+.cell {
+  border: none;
+  border-radius: 6px;
+  background: var(--paper);
+  font-family: 'Permanent Marker', cursive;
+  font-size: clamp(2rem, 10vw, 3.5rem);
+  cursor: pointer;
+}
+.cell[aria-disabled='true'] { cursor: default; }
+.cell:focus-visible { outline: 4px solid var(--yellow); outline-offset: -4px; }
+.cell.mark-X { color: #1a8c82; } /* darker teal for contrast on cream */
+.cell.mark-O { color: #d9483a; } /* darker coral for contrast on cream */
+.cell.win { background: var(--yellow); }
+
+.status { margin: 0; font-weight: 800; font-size: 1.1rem; }
+
+.btn {
+  font-family: 'Permanent Marker', cursive;
+  font-size: 1.2rem;
+  padding: 10px 24px;
+  background: #fff;
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 16px;
+  box-shadow: 3px 4px 0 rgba(31, 29, 43, 0.18);
+  cursor: pointer;
+}
+.btn:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
