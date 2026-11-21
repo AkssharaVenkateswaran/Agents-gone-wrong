@@ -113,6 +113,10 @@ export function freshRoundState(roundNumber) {
     cheatLandedAt: {},     // cheat id -> Otto turn it landed on (for the quick-counter bonus)
     spinsToUndo: 0,        // Board Spins that haven't been undone yet (Paperweight)
 
+    // --- Otto's cosmetic interface sabotage (reset each round) ---
+    ui: { toolboxOffset: null, toolboxMinimised: false, diskOrder: null, bubbleDown: false },
+    lastSabotageTurn: -99, // Otto turn of the last sabotage (max once per 3 Otto turns)
+
     // --- Power-ups in use ---
     mode: null,            // power-up waiting for a click: { type: 'flick' | 'ownLinePick' | 'ownLinePlace', cells? }
     extraMarks: 0,         // Double Mark: extra X marks left to place this turn

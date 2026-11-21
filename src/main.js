@@ -72,6 +72,8 @@ import {
   setMusicStageOverride,
 } from './music.js';
 import { initRender, updateTurnTimer, ruleRowPosition } from './ui/render.js';
+import { performMove, performCheat, performTelegraph, performRuleRewrite, performSabotage } from './ui/performances.js';
+import { initOttoCursor, setCursorPatience, slap, park } from './ui/ottoCursor.js';
 import {
   showPopup,
   spinBoardEffect,
@@ -310,6 +312,7 @@ async function startPlayerTurn() {
   emit('change');
   startTurnTimer();
   watchForBoredom();
+  park(); // Otto's cursor waits in the corner during the player's turn
 }
 
 // --- The turn timer rule -----------------------------------------------------------
@@ -521,6 +524,10 @@ async function ruleChangeScene() {
     const picked = ottoRewriteRules(state);
     if (!picked) return true;
     change = { ...picked, oldId: before[getRule(picked.ruleId).category].ruleId };
+    // Otto's cursor opens RULES.TXT, deletes the old rule and types the new one.
+    const typing = generation;
+    await performRuleRewrite(getRule(picked.ruleId).category, getRule(picked.ruleId).name, sfx.click);
+    if (typing !== generation) return false;
     sfx.rule();
   }
   state.lastRuleChange = change;
@@ -578,6 +585,10 @@ async function ottoTurn() {
   if (!(await pause(THINK_MIN_MS + Math.random() * THINK_EXTRA_MS))) return;
   state.ottoThinking = false;
 
+  // Unhinged or worse: now and then Otto's cursor messes with the interface
+  // (cosmetic only, never on the player's turn, at most once every 3 Otto turns).
+  if (!(await maybeSabotage())) return;
+
   // A cheat (rarely: never early, at most 1 per 3 turns, never one that decides the round).
   const picked = pickCheat(state);
   if (picked) {
@@ -592,11 +603,13 @@ async function ottoTurn() {
     // If everyone's games shaped this pick, Otto shows its reasoning like a terminal.
     if (dataDriven) state.ottoSays = cheatReasoning(state.tactics, cheat);
     emit('change');
+    // Meanwhile Otto's cursor visibly heads for its target.
+    performTelegraph(cheat, state, trial);
     if (!(await pause(TELEGRAPH_MS))) return;
 
     if (state.telegraph === cheat.id) {
       state.telegraph = null;
-      runCheat(cheat, trial);
+      if (!(await runCheat(cheat, trial))) return;
       if (state.roundOver) return;
       if (cheat.replacesMove) {
         endOttoTurn(); // the cheat already placed Otto's mark(s)
@@ -610,7 +623,49 @@ async function ottoTurn() {
     state.ottoThinking = false;
   }
 
-  ottoNormalMove();
+  await ottoNormalMove();
+}
+
+// Cosmetic interface sabotage by Otto's cursor (stage 2+, not in Calm mode).
+// Returns false if the match was reset meanwhile.
+const SABOTAGE_GAP = 3;
+async function maybeSabotage(force = null) {
+  if (!force && (state.calm || stage() < 2 || state.turnNumber - state.lastSabotageTurn < SABOTAGE_GAP)) return true;
+  if (!force && Math.random() > 0.45) return true;
+  state.lastSabotageTurn = state.turnNumber;
+  const kinds = ['dragToolbox', 'minimiseToolbox', 'shuffleDisks', 'hideBubble'];
+  const kind = force || kinds[Math.floor(Math.random() * kinds.length)];
+  const myGeneration = generation;
+  await performSabotage(kind, (value) => applySabotage(kind, value), sfx.click);
+  return myGeneration === generation;
+}
+
+function applySabotage(kind, value) {
+  if (kind === 'dragToolbox') state.ui.toolboxOffset = value;
+  if (kind === 'minimiseToolbox') state.ui.toolboxMinimised = true;
+  if (kind === 'shuffleDisks') state.ui.diskOrder = [...(state.ui.diskOrder ?? defaultDiskOrder())].sort(() => Math.random() - 0.5);
+  if (kind === 'hideBubble') {
+    state.ui.bubbleDown = true;
+    const ui = state.ui;
+    setTimeout(() => {
+      if (state.ui === ui) {
+        ui.bubbleDown = false; // "you didn't see that"
+        emit('change');
+      }
+    }, 6000);
+  }
+  emit('change');
+}
+
+function defaultDiskOrder() {
+  return ['flick', 'lightSwitch', 'eraser', 'paperweight', 'glueStick', 'timeOut', 'myOwnLine', 'doubleMark', 'veto', 'amendment'];
+}
+
+// The player clicked TOOLBOX.EXE's taskbar button: bring it back.
+function restoreToolbox() {
+  state.ui.toolboxMinimised = false;
+  state.ui.toolboxOffset = null;
+  emit('change');
 }
 
 // The player clicked Otto (or pressed C).
@@ -631,6 +686,7 @@ function catchCheat() {
   sfx.caught();
   musicEvent('cheatCaught');
   showPopup('CAUGHT!');
+  slap(); // Otto's cursor gets slapped away
   if (state.patience <= 0) patienceRanOut();
 }
 
@@ -649,7 +705,12 @@ async function patienceRanOut() {
 }
 
 // Apply a cheat whose result was already checked by simulateCheat() (see agent.js).
-function runCheat(cheat, trial) {
+// Otto's cursor performs it first; the change lands when the animation gets there.
+// Returns false if the match was reset meanwhile.
+async function runCheat(cheat, trial) {
+  const myGeneration = generation;
+  await performCheat(cheat, state, trial, sfx.click);
+  if (myGeneration !== generation) return false;
   commitCheat(state, trial);
   state.cooldowns[cheat.id] = cheat.cooldown;
   state.lastCheat = { id: cheat.id, turnNumber: state.turnNumber };
@@ -664,11 +725,16 @@ function runCheat(cheat, trial) {
   musicEvent('cheat');
   if (cheat.id === 'boardSpin') spinBoardEffect();
   checkRoundEnd('O');
+  return true;
 }
 
-function ottoNormalMove() {
+async function ottoNormalMove() {
   const landing = chooseMove(state);
   if (landing !== undefined) {
+    // Otto's cursor glides to the cell, hovers, clicks — then the O appears.
+    const myGeneration = generation;
+    await performMove(landing, sfx.click);
+    if (myGeneration !== generation) return;
     placeMove(state, landing, 'O');
     sfx.otto();
   }
@@ -940,6 +1006,7 @@ async function rememberMatch(winner) {
 // Sound detune and the low buzz follow Otto's stage (and Calm mode).
 function updateStageEffects() {
   const now = state.calm ? 0 : stage();
+  setCursorPatience(state.patience);
   setMusicStage(stage());
   setMusicPatience(state.patience);
   setMusicCalm(state.calm);
@@ -1135,8 +1202,10 @@ initRender(document.getElementById('app'), {
   onCalm: toggleCalm,
   onMusic: toggleMusic,
   onSkip: skipRampage,
+  onRestoreToolbox: restoreToolbox,
   onDebug: debugAction,
 });
+initOttoCursor();
 initChaos(
   () => ({
     stage: stage(),

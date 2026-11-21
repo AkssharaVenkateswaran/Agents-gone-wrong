@@ -799,6 +799,38 @@ body.calm .extra { animation: none; }
 .twin-figures { display: flex; gap: 4px; --px: 3; }
 .debug-msg, .debug b { overflow-wrap: anywhere; }
 
+/* ==========================================================================
+   Otto's cursor and its performances (AGENTIC.md section 1)
+   ========================================================================== */
+.otto-cursor { position: fixed; left: 0; top: 0; z-index: 70; pointer-events: none; --px: 2; filter: drop-shadow(2px 2px 0 var(--ink)); }
+.otto-cursor .cursor-tag { position: absolute; left: 20px; top: 30px; padding: 1px 4px; font: 16px/1 var(--text-font); color: var(--cream); background: var(--pink); border: 2px solid var(--ink); }
+.otto-cursor .cursor-carry { position: absolute; left: 22px; top: -6px; --px: 2; }
+.otto-cursor.pressing .hand { animation: press 0.14s steps(2); }
+@keyframes press { 50% { translate: 2px 3px; } }
+.cursor-ripple { position: fixed; z-index: 69; pointer-events: none; width: 6px; height: 6px; translate: -50% -50%; border: 3px solid var(--pink); animation: ripple 0.45s steps(4) forwards; }
+@keyframes ripple { to { width: 42px; height: 42px; opacity: 0; } }
+.cursor-trail { position: fixed; z-index: 68; width: 4px; height: 4px; background: var(--pink); pointer-events: none; animation: fade-out 0.5s steps(3) forwards; }
+.smack { position: fixed; z-index: 71; pointer-events: none; translate: -50% -100%; padding: 4px 8px; font: 14px var(--pixel-font); color: var(--ink); background: var(--yellow); border: 3px solid var(--ink); animation: stamp 0.9s steps(1) forwards; }
+.perform-overlay { position: fixed; z-index: 66; pointer-events: none; }
+.pen { display: block; width: 6px; height: 18px; background: var(--teal, #5cd6ff); border: 2px solid var(--ink); rotate: 30deg; }
+.pen-line.row { height: 4px; width: 0; background: var(--pink); }
+.pen-line.col { width: 4px; height: 0; background: var(--pink); }
+.folder-window { width: 150px; }
+.folder-body { display: flex; gap: 4px; --px: 2; }
+.dropped-minion { --px: 2; }
+.trash-can .bin { display: block; width: 30px; height: 34px; background: var(--plastic-shade); border: 3px solid var(--ink); border-top-width: 6px; }
+.cell .mark.grabbed { visibility: hidden; }
+.rule-name.selected { background: var(--cyan); color: var(--ink); }
+/* the little light switch in the top bar (Lights Out) */
+.light-switch { display: inline-grid; place-items: center; width: 18px; height: 26px; background: var(--cream); border: 3px solid var(--ink); }
+.light-switch i { width: 6px; height: 9px; background: var(--ink); translate: 0 -4px; }
+.light-switch.off i { translate: 0 4px; }
+/* sabotage */
+.toolbox-minimised { display: grid; align-content: start; gap: 8px; }
+.taskbar-btn { justify-self: start; }
+.taskbar-note { margin: 0; font: 20px var(--text-font); color: var(--cream); }
+.bubble.dragged { translate: 0 64px; z-index: 3; }
+
 /* --- Reduced motion: nothing drifts, bounces, spins or flies. --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .drift, .dots i, .otto-face.think .f1, .otto-face.think .f2, .otto-face.flicker,

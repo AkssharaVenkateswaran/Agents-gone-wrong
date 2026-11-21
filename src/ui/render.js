@@ -93,6 +93,7 @@ export function initRender(rootElement, callbacks) {
     if (t.closest('#calm')) handlers.onCalm();
     if (t.closest('#music')) handlers.onMusic();
     if (t.closest('#skip')) handlers.onSkip();
+    if (t.closest('#restore-toolbox')) handlers.onRestoreToolbox();
     const disk = t.closest('[data-powerup]');
     if (disk) {
       insertingDisk = disk.dataset.powerup;
@@ -377,6 +378,7 @@ function renderTopBar() {
         ${fallingText(`ROUND ${state.roundNumber} · YOU ${state.roundsWon.you} – ${state.roundsWon.otto} OTTO`)}
       </div>
       <div class="topbar-right">
+        <span id="light-switch" class="light-switch ${state.lightsOut ? 'off' : ''}" title="The lights (Otto likes to flick them off)" aria-hidden="true"><i></i></span>
         <span class="memory-disk ${memory}" title="${memoryText}" role="img" aria-label="${memoryText}">
           ${sprite(floppy('n'))}<span class="memory-light"></span>
         </span>
@@ -397,7 +399,18 @@ function renderTopBar() {
 
 // --- Left: TOOLBOX.EXE -----------------------------------------------------------------------
 function renderToolbox() {
-  const disks = POWERUPS.map((p, n) => {
+  // Otto's cursor may have minimised TOOLBOX.EXE: show its taskbar button instead.
+  if (state.ui.toolboxMinimised) {
+    return `
+      <aside class="toolbox-minimised" aria-label="Your toolbox (minimised)">
+        <button id="restore-toolbox" class="btn taskbar-btn">▣ TOOLBOX.EXE</button>
+        <p class="taskbar-note">Otto minimised your toolbox. Click to restore it.</p>
+      </aside>`;
+  }
+  // ...or shuffled the floppies.
+  const order = state.ui.diskOrder;
+  const ordered = order ? order.map((id) => POWERUPS.find((p) => p.id === id)) : POWERUPS;
+  const disks = ordered.map((p, n) => {
     const affordable = canAfford(state, p);
     const useful = p.canUse(state);
     const active =
@@ -425,7 +438,8 @@ function renderToolbox() {
   }).join('');
 
   return `
-    <aside class="toolbox window" aria-label="Your toolbox">
+    <aside class="toolbox window" aria-label="Your toolbox"
+           ${state.ui.toolboxOffset ? `style="translate:${state.ui.toolboxOffset.x}px ${state.ui.toolboxOffset.y}px"` : ''}>
       ${titleBar('TOOLBOX.EXE')}
       <div class="window-body">
         <div class="points" id="points" aria-live="polite">
@@ -721,7 +735,7 @@ function renderOtto() {
         ${redScreen ? '<span class="otto-screen-text">PATIENCE.SYS<br>NOT FOUND</span>' : face}
         ${ottoExtras(look.extras)}
       </button>
-      <div class="bubble ${bubbleJitter()} ${state.ottoSays.startsWith('OTTO@AGENT') && !look.thinking ? 'terminal' : ''}" role="status" aria-live="polite">${bubble}</div>
+      <div class="bubble ${bubbleJitter()} ${state.ui.bubbleDown ? 'dragged' : ''} ${state.ottoSays.startsWith('OTTO@AGENT') && !look.thinking ? 'terminal' : ''}" role="status" aria-live="polite">${bubble}</div>
       <div class="patience">
         <span id="patience-label">OTTO'S PATIENCE: <b class="stage-label">${stageLabel}</b></span>
         <div class="patience-bar ${patience < 30 ? 'low' : ''}" role="progressbar" aria-labelledby="patience-label"
