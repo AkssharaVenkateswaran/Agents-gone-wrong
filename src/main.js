@@ -76,6 +76,7 @@ import { initRender, updateTurnTimer, ruleRowPosition } from './ui/render.js';
 import { performMove, performCheat, performTelegraph, performRuleRewrite, performSabotage } from './ui/performances.js';
 import { initOttoCursor, setCursorPatience, slap, park } from './ui/ottoCursor.js';
 import { initSwarm, clearSwarm, spawnMinion } from './ui/swarm.js';
+import { initGlitch, glitchBurst } from './ui/glitch.js';
 import {
   showPopup,
   spinBoardEffect,
@@ -569,6 +570,7 @@ async function ottoTurn() {
   if (!(await pause(PLAYER_TO_OTTO_MS))) return;
   state.turnNumber++;
   state.ottoTurnStartedAt = Date.now(); // the monitor nudges / shudders (see render.js)
+  glitchBurst({ ottoTurn: true }); // the madder Otto is, the more its turns glitch
   tickCooldowns(state);
   if (state.spinBlockedTurns > 0) state.spinBlockedTurns--;
 
@@ -1312,6 +1314,12 @@ initRender(document.getElementById('app'), {
   onDebug: debugAction,
 });
 initOttoCursor();
+initGlitch(() => ({
+  patience: state.patience,
+  calm: state.calm,
+  active: state.screen === 'game' && !state.matchOver,
+  rampage: !!state.rampage,
+}));
 initSwarm({
   getInfo: () => ({
     stage: stage(),

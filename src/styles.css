@@ -911,6 +911,47 @@ body.calm .extra { animation: none; }
 }
 .monitor.unplugged .screen { filter: brightness(0.7); }  /* dims 30%: still readable and clickable */
 
+/* ==========================================================================
+   Glitching that grows with madness (AGENTIC.md section 4)
+   ========================================================================== */
+.glitch-layer { position: fixed; inset: 0; z-index: 55; pointer-events: none; overflow: hidden; }
+/* static: a faint magenta tint over the background (never over the board's contrast) */
+body.glitch-tinted::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: var(--pink); opacity: var(--glitch-tint, 0);
+}
+/* scanline jitter: faint lines that twitch sideways */
+.glitch-lines {
+  position: absolute; inset: 0; opacity: 0.14;
+  background: repeating-linear-gradient(to bottom, var(--ink) 0 2px, transparent 2px 5px);
+  animation: line-jitter 0.1s steps(2) infinite;
+}
+@keyframes line-jitter { 50% { translate: 3px 1px; } }
+/* RGB split on headings and the bubble */
+body.glitch-rgb .game-title, body.glitch-rgb .title-bar > span:first-child, body.glitch-rgb .bubble, body.glitch-rgb .stage-label {
+  text-shadow: 2px 0 rgba(255, 60, 90, 0.85), -2px 0 rgba(60, 230, 255, 0.85);
+}
+/* "(Not Responding)" title bars (never on pop-ups) */
+body.glitch-not-responding :is(.toolbox, .rules, .terminal, .twin) > .title-bar > span:first-child::after { content: ' (Not Responding)'; opacity: 0.85; }
+/* shifted slices of the side panels */
+.glitch-slice { position: fixed; z-index: 1; pointer-events: none; box-sizing: border-box; }
+.glitch-smear {
+  position: absolute; opacity: 0.45; filter: blur(1px);
+  background: linear-gradient(90deg, var(--pink), var(--cyan), var(--lime), transparent);
+  transform: skewX(-20deg);
+}
+.glitch-invert { position: absolute; backdrop-filter: invert(1); }
+.glitch-tear {
+  position: absolute; opacity: 0.6;
+  background: repeating-linear-gradient(90deg, var(--cyan) 0 6px, var(--ink) 6px 9px, var(--pink) 9px 14px);
+}
+/* a 2-4 px shudder of the panels around the board (the board itself stays still) */
+body.glitch-shudder .toolbox, body.glitch-shudder .otto-side, body.glitch-shudder .topbar { animation: ui-shudder 0.12s steps(3) infinite; }
+@keyframes ui-shudder { 33% { translate: 3px -2px; } 66% { translate: -2px 3px; } }
+/* g > 0.9: the cracks pulse */
+body.cracks-pulse .crack { animation: crack-pulse 1.6s steps(4) infinite; }
+@keyframes crack-pulse { 50% { opacity: 0.85; } }
+
 /* --- Reduced motion: nothing drifts, bounces, spins or flies. --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .drift, .dots i, .otto-face.think .f1, .otto-face.think .f2, .otto-face.flicker,
@@ -924,6 +965,7 @@ body.calm .extra { animation: none; }
   .extra, .wipe-new { animation: none; }
   .term-cmd.typing { animation: none; max-width: 100%; }
   .roamer svg, .roamer.walking svg { animation: none; }
+  .glitch-lines, body.glitch-shudder .toolbox, body.glitch-shudder .otto-side, body.glitch-shudder .topbar, body.cracks-pulse .crack { animation: none; }
   .roamer.bonked { animation: none; opacity: 0; }
   .cable span { animation: none; }
   .term-result.waiting { animation: none; visibility: visible; }
