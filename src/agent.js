@@ -2,10 +2,11 @@
 // Otto's brain: picks normal moves, decides when to cheat, and tracks its patience.
 // (The move-choosing and rule-choosing details live in ai.js.)
 
-import { pickRandom, cloneBoard } from './board.js';
+import { cloneBoard } from './board.js';
 import { CHEATS, getCheat } from './cheats.js';
 import { ottoMove, findWinningSquare } from './ai.js';
 import { lineFor } from './rules.js';
+import { cheatScore, weightOf, weightedPick } from './tactics.js';
 
 // Chance Otto cheats on a turn goes from 20% (calm) up to 80% (furious).
 const MIN_CHEAT_CHANCE = 0.2;
@@ -54,7 +55,7 @@ export function pickCheat(state) {
     state.debug.forceCheat = null;
     state.debug.message = '';
     const trial = cheat.canUse(state) && simulateCheat(state, cheat);
-    if (trial) return { cheat, trial };
+    if (trial) return { cheat, trial, dataDriven: cheatScore(state.tactics, cheat.id) !== null };
     state.debug.message = `${cheat.name} can't be used right now (impossible, or it would decide the match).`;
     return null;
   }
@@ -77,21 +78,24 @@ export function pickCheat(state) {
       state.frustration >= cheat.minFrustration &&
       cheat.canUse(state)
   );
-  // Try them in a random order and use the first one that is fair.
+  // Try them in a random order (cheats that work well on humans, according to
+  // everyone's games in Snowflake, are a bit more likely) and use the first fair one.
   while (options.length > 0) {
-    const cheat = pickRandom(options);
+    const cheat = weightedPick(options, (c) => weightOf(cheatScore(state.tactics, c.id)));
     options.splice(options.indexOf(cheat), 1);
     const trial = simulateCheat(state, cheat);
-    if (trial) return { cheat, trial };
+    if (trial) return { cheat, trial, dataDriven: cheatScore(state.tactics, cheat.id) !== null };
   }
   return null;
 }
 
 // --- Otto's patience ------------------------------------------------------------------------
-// Patience (100 -> 0) only changes on round results. Its opposite, "frustration"
-// (0 -> 100), is what makes Otto sharper and cheat more (see ai.js and pickCheat).
-export const PATIENCE_LOST_ROUND = -35; // Otto loses a round
-export const PATIENCE_WON_ROUND = 10;   // Otto wins a round (never above 100)
+// Patience (100 -> 0): the player wins the match by draining it to 0. Its opposite,
+// "frustration" (0 -> 100), is what makes Otto sharper and cheat more (see ai.js and pickCheat).
+export const PATIENCE_LOST_ROUND = -50; // Otto loses a round
+export const PATIENCE_DRAW = -15;       // a round ends in a draw
+export const PATIENCE_CAUGHT = -5;      // the player catches one of Otto's cheats
+export const PATIENCE_WON_ROUND = 5;    // Otto wins a round (never above 100)
 
 export function setPatience(state, patience) {
   state.patience = Math.max(0, Math.min(100, Math.round(patience)));

@@ -7,12 +7,13 @@ Keep the retro pixel-art style, Snowflake memory, power-ups and cheats working. 
 ## 1. Match structure: drain Otto's patience over 3–4 longer rounds
 - **Otto's Patience** starts at **100** and is the main goal: the player wins the match by draining it to **0**.
 - The match is made of **rounds**. After each round the board resets; patience, points and power-ups carry over.
-- Patience changes ONLY on round results (use these exact numbers, in patience points out of 100):
-  - Otto **loses** a round (player wins): **−35**
-  - Otto **wins** a round: **+10** (never above 100)
-  - Draw: no change
-- Catching or countering cheats and blocking lines do NOT change patience (they still give points and trigger Otto's reactions).
-- With these numbers the player needs **3 round wins** if Otto never wins a round, or **4** if Otto wins one or more after the player has started draining him, so a match lasts about 3–5 rounds.
+- Patience changes on these events only (use these exact numbers, in patience points out of 100):
+  - Otto **loses** a round (player wins): **−50**
+  - Draw: **−15**
+  - The player **catches** a cheat: **−5** (if this drains the last patience mid-round, the match is won)
+  - Otto **wins** a round: **+5** (never above 100)
+- Countering cheats and blocking lines do NOT change patience (they still give points and trigger Otto's reactions).
+- With these numbers **2 round wins** (or 1 win + a draw + a few catches) can finish Otto, so a match lasts about 2–4 rounds.
 - **Otto wins the match** if he wins **3 rounds** before his patience runs out (smug ending, see section 5).
 - HUD: `ROUND 2 · YOU 1 – 0 OTTO`. Otto's patience bar shows a stage label (see section 3).
 

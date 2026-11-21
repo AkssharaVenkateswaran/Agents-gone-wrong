@@ -9,9 +9,9 @@ import { validateMatch } from './_lib/validate.js';
 // INSERT ... SELECT (not VALUES) so we can turn JSON text into ARRAY columns.
 const INSERT_MATCH = `
   INSERT INTO GAME_LOGS
-    (match_id, player_name, first_move, cheats_used, cheats_caught, powerups_used, winner, turns, final_grid)
+    (match_id, player_name, first_move, cheats_used, cheats_caught, powerups_used, winner, turns, final_grid, rules_seen)
   SELECT ?, ?, NULLIF(?, ''), PARSE_JSON(?)::ARRAY, PARSE_JSON(?)::ARRAY, PARSE_JSON(?)::ARRAY, ?,
-         TRY_TO_NUMBER(NULLIF(?, '')), NULLIF(?, '')`;
+         TRY_TO_NUMBER(NULLIF(?, '')), NULLIF(?, ''), PARSE_JSON(?)::ARRAY`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -34,6 +34,7 @@ export default async function handler(req, res) {
       match.winner,
       match.turns ?? '',
       match.finalGrid ?? '',
+      JSON.stringify(match.rulesSeen),
     ]);
   } catch (err) {
     console.error('Saving match failed:', err.message);

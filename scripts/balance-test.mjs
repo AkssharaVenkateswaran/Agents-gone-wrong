@@ -22,6 +22,7 @@ import {
   setPatience,
   PATIENCE_LOST_ROUND,
   PATIENCE_WON_ROUND,
+  PATIENCE_DRAW,
 } from '../src/agent.js';
 import { ottoMove, ottoRewriteRules, winningSquares, reasonableSquare, expiryIsSafe, SKILL } from '../src/ai.js';
 import { getPowerUp, canAfford } from '../src/powerups.js';
@@ -38,7 +39,29 @@ import {
   fadeOldMarks,
 } from '../src/rules.js';
 
-const COUNT = Number(process.argv[2]) || 1000;
+const COUNT = Number(process.argv.find((arg) => /^\d+$/.test(arg))) || 1000;
+// --tactics: Otto also uses typical crowd data from Snowflake (GET /api/tactics) to
+// weight its cheat and rule choices, like in the real game.
+const WITH_TACTICS = process.argv.includes('--tactics');
+const TYPICAL_TACTICS = {
+  cheats: {
+    lightsOut: { attempts: 40, landRate: 82, ottoWinRate: 45 },
+    extraLine: { attempts: 30, landRate: 70, ottoWinRate: 40 },
+    minionDrop: { attempts: 35, landRate: 75, ottoWinRate: 50 },
+    markSteal: { attempts: 25, landRate: 60, ottoWinRate: 55 },
+    doubleMove: { attempts: 20, landRate: 65, ottoWinRate: 60 },
+    boardSpin: { attempts: 30, landRate: 80, ottoWinRate: 35 },
+    rewriteRules: { attempts: 15, landRate: 70, ottoWinRate: 50 },
+  },
+  rules: {
+    four: { matches: 50, ottoWinRate: 45 }, five: { matches: 20, ottoWinRate: 60 },
+    noDiagonals: { matches: 25, ottoWinRate: 40 }, onlyDiagonals: { matches: 18, ottoWinRate: 55 },
+    gravity: { matches: 30, ottoWinRate: 50 }, lava: { matches: 22, ottoWinRate: 35 },
+    touch: { matches: 20, ottoWinRate: 45 }, fade: { matches: 15, ottoWinRate: 55 },
+    mirror: { matches: 18, ottoWinRate: 50 }, timer: { matches: 12, ottoWinRate: 65 },
+    reverse: { matches: 10, ottoWinRate: 40 },
+  },
+};
 // Optional, for tuning: SKILL_JSON='[[takeWin, block, best], ...]' (one per band) overrides ai.js.
 if (process.env.SKILL_JSON) {
   JSON.parse(process.env.SKILL_JSON).forEach(([takeWin, block, best], n) => Object.assign(SKILL[n], { takeWin, block, best }));
@@ -176,7 +199,7 @@ function playRound(s) {
 
 // A fresh round with Otto's patience fixed (for the per-band table).
 function roundAtPatience(patience, roundNumber) {
-  const s = { ...freshMatchState(), debug: {}, memory: {} };
+  const s = { ...freshMatchState(), debug: {}, memory: {}, tactics: WITH_TACTICS ? TYPICAL_TACTICS : null };
   Object.assign(s, freshRoundState(roundNumber));
   setPatience(s, patience);
   return playRound(s);
@@ -184,7 +207,7 @@ function roundAtPatience(patience, roundNumber) {
 
 // A whole match: rounds until patience hits 0 (player wins) or Otto wins 3 rounds.
 function playMatch() {
-  const s = { ...freshMatchState(), debug: {}, memory: {} };
+  const s = { ...freshMatchState(), debug: {}, memory: {}, tactics: WITH_TACTICS ? TYPICAL_TACTICS : null };
   setPatience(s, 100);
   for (;;) {
     const result = playRound(s);
@@ -194,6 +217,8 @@ function playMatch() {
     } else if (result === 'O') {
       s.roundsWon.otto++;
       setPatience(s, s.patience + PATIENCE_WON_ROUND);
+    } else {
+      setPatience(s, s.patience + PATIENCE_DRAW);
     }
     if (s.patience <= 0) return { winner: 'X', rounds: s.roundNumber };
     if (s.roundsWon.otto >= OTTO_ROUNDS_TO_WIN) return { winner: 'O', rounds: s.roundNumber };
@@ -206,7 +231,7 @@ function playMatch() {
 const pct = (n, total) => `${((100 * n) / total).toFixed(1)}%`;
 const started = Date.now();
 
-console.log(`Balance test, seed 2026\n`);
+console.log(`Balance test, seed 2026${WITH_TACTICS ? ', with typical Snowflake tactics weights' : ''}\n`);
 console.log(`Round wins at each patience band (${COUNT} rounds each; 2 in 3 are rounds 1-2 on 4x4 with 3 in a row, 1 in 3 is round 3+ on 5x5 with 4 in a row):\n`);
 console.log('| Patience | Otto skill (win / block / best) | Player wins | Otto wins | Draws |');
 console.log('|---|---|---|---|---|');

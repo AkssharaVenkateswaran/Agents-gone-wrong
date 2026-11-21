@@ -791,6 +791,14 @@ body.stage-3:not(.calm) .rules-scribble { display: block; }
 /* Calm mode and reduced motion: the extras stay still. */
 body.calm .extra { animation: none; }
 
+/* Otto's terminal: when everyone's games (Snowflake) shaped its choice. */
+.bubble.terminal { white-space: pre-line; -webkit-line-clamp: 4; font: 18px/1.05 var(--text-font); background-clip: padding-box; }
+/* TWIN.DAT on the end screens */
+.twin { width: 100%; text-align: left; }
+.twin-body { display: flex; align-items: center; gap: 12px; font: 22px var(--text-font); }
+.twin-figures { display: flex; gap: 4px; --px: 3; }
+.debug-msg, .debug b { overflow-wrap: anywhere; }
+
 /* --- Reduced motion: nothing drifts, bounces, spins or flies. --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .drift, .dots i, .otto-face.think .f1, .otto-face.think .f2, .otto-face.flicker,

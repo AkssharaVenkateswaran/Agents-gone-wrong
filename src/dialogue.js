@@ -257,8 +257,14 @@ function pick(list) {
 }
 
 // A match-start taunt using real stats, or null if there's nothing worth saying.
+// The evil twin (the player with the most similar play style) comes first.
 export function sayFromMemory(stats) {
   if (!stats) return null;
+  if (stats.twin) {
+    const ending = stats.twin.hasWins ? 'won once. Lucky.' : 'lost too.';
+    return `Your play style is ${stats.twin.similarity}% identical to ${stats.twin.name}. ${stats.twin.name} ${ending}`;
+  }
+  if (stats.player && stats.player.matches === 0) return "No data on you yet, human. I'm watching.";
   const options = [];
   const player = stats.player;
   if (player?.firstMove && player.firstMove.count >= 2) {

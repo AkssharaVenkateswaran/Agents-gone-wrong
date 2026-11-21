@@ -52,6 +52,7 @@ import {
   OTTO_EXTRAS,
   crackSprite,
   wobblyLine,
+  tinyFigure,
 } from './sprites.js';
 
 // The full power-up name on each floppy's label (soft hyphens let long words wrap
@@ -720,7 +721,7 @@ function renderOtto() {
         ${redScreen ? '<span class="otto-screen-text">PATIENCE.SYS<br>NOT FOUND</span>' : face}
         ${ottoExtras(look.extras)}
       </button>
-      <div class="bubble ${bubbleJitter()}" role="status" aria-live="polite">${bubble}</div>
+      <div class="bubble ${bubbleJitter()} ${state.ottoSays.startsWith('OTTO@AGENT') && !look.thinking ? 'terminal' : ''}" role="status" aria-live="polite">${bubble}</div>
       <div class="patience">
         <span id="patience-label">OTTO'S PATIENCE: <b class="stage-label">${stageLabel}</b></span>
         <div class="patience-bar ${patience < 30 ? 'low' : ''}" role="progressbar" aria-labelledby="patience-label"
@@ -858,6 +859,7 @@ function renderRampage() {
           <p>Otto closed the game. You drained his patience in ${state.roundNumber} rounds.</p>
           <button id="play-again" class="btn">[REBOOT OTTO]</button>
           ${state.memory.stats ? renderLeaderboard() : ''}
+          ${renderTwin()}
         </div>
       </div>`;
   }
@@ -876,8 +878,23 @@ function renderEnding() {
           <p class="ending-line">OTTO: ...I cheated, obviously.</p>
           <p class="ending-line">Otto won ${state.roundsWon.otto} rounds before you could drain its patience (${state.patience} left).</p>
           ${renderLeaderboard()}
+          ${renderTwin()}
           <button id="play-again" class="btn">[PLAY AGAIN]</button>
         </div>
+      </div>
+    </div>`;
+}
+
+// TWIN.DAT: the player whose play style is most like yours (from Snowflake).
+function renderTwin() {
+  const twin = state.memory.stats?.twin;
+  if (!twin) return '';
+  return `
+    <div class="window twin" aria-label="Your evil twin: ${escapeHtml(twin.name)}, ${twin.similarity}% match">
+      ${titleBar('TWIN.DAT')}
+      <div class="window-body twin-body">
+        <span class="twin-figures" aria-hidden="true">${sprite(tinyFigure('l'))}${sprite(tinyFigure('p'))}</span>
+        <span>YOUR EVIL TWIN: ${escapeHtml(twin.name)} (${twin.similarity}% match)</span>
       </div>
     </div>`;
 }
@@ -922,6 +939,8 @@ function renderDebug() {
           <button class="debug-btn" data-debug="ruleNow">Rules change next turn</button>
           <button class="debug-btn" data-debug="grow">Grow board +1</button>
           <button class="debug-btn" data-debug="turn19">Jump to turn 20</button>
+          <button class="debug-btn" data-debug="showTactics">Show tactics</button>
+          <button class="debug-btn" data-debug="showTwin">Show twin</button>
           <button class="debug-btn" data-debug="points">+10 points</button>
           <button class="debug-btn" data-debug="cooldowns">Clear cooldowns</button>
         </div>

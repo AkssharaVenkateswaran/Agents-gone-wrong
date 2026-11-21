@@ -39,8 +39,8 @@ src/
 ### Match structure: drain Otto's patience over several rounds
 - **Otto's Patience** starts at **100** and is the main goal: the player wins the match by draining it to **0**.
 - A match is made of **rounds**. After each round the board resets; patience, points and power-ups carry over.
-- Patience changes **only** on round results: Otto **loses** a round **−35**, Otto **wins** a round **+10** (never above 100), draw: no change. Catching or countering cheats and blocking lines do NOT change patience (they still give points and trigger Otto's reactions).
-- So the player needs **3 round wins** if Otto never wins a round, or **4** if Otto wins one or more after the player has started draining him.
+- Patience changes on these events only: Otto **loses** a round **−50**, a **draw** **−15**, the player **catches** a cheat **−5** (if that drains the last patience mid-round, the match is won), Otto **wins** a round **+5** (never above 100). Countering cheats and blocking lines do NOT change patience (they still give points and trigger Otto's reactions).
+- So **2 round wins** (or 1 win + a draw + a few catches) can finish Otto; a match lasts about 2–4 rounds.
 - **Otto wins the match** if he wins **3 rounds** before his patience runs out.
 - **Rounds 1–2** start on a **4×4** board with **WIN: 3 IN A ROW** (round 1 is the tutorial round); **round 3+** starts on **5×5** with **WIN: 4 IN A ROW**. In round 1, when Otto is one move from winning, the threatened square pulses gently and Otto says `> threat: you're about to lose, human`.
 - Otto plays fair until the first rule change of each round and **can't win before it**.
@@ -54,10 +54,10 @@ src/
 - **Otto makes mistakes**, fewer as it gets angrier (lower patience). On each normal move it takes its own winning move, blocks the player's winning threat, and otherwise plays its best square (else a random square next to existing marks) with these chances, on every board size and rule (`npm run balance` reports how the test bot does):
   | Patience | Takes its win | Blocks the player | Plays its best square |
   |---|---|---|---|
-  | 100–76 | 74% | 60% | 64% |
-  | 75–51 | 84% | 72% | 77% |
-  | 50–26 | 92% | 82% | 86% |
-  | 25–0 | 100% | 90% | 92% |
+  | 100–76 | 26% | 18% | 22% |
+  | 75–51 | 31% | 22% | 27% |
+  | 50–26 | 55% | 43% | 48% |
+  | 25–0 | 57% | 45% | 50% |
 - Otto's "best square" looks one move ahead and avoids squares that let the player set up two threats at once.
 - **Cheats are rare and never decide a round:** at most 1 cheat attempt every 3 Otto turns, none in Otto's first 2 turns of a round, none before the round's first rule change. The chance of a cheat grows from 20% (patience 100) to 80% (patience 0). Each cheat is first tried on a copy of the game and skipped if it would complete a winning line for Otto or remove the player's only winning move.
 - Each cheat also has a **cooldown** (a few turns).
@@ -145,7 +145,11 @@ Must work on **any grid size** (up to 7×7) and for the **current** win rule: an
 ### Ending
 - **The rampage (patience reaches 0, the player wins):** the match is saved to Snowflake first, inputs are locked, and it plays for about 12–15 seconds (skippable with `[SKIP]`): Otto's monitor turns red with `PATIENCE.SYS NOT FOUND`; Otto: `FINE. FINE! YOU WANT TO WIN? HAVE YOUR STUPID GAME.`; the floppy disks fly out of `TOOLBOX.EXE`, `RULES.TXT` is scribbled out and slides off, `OTTO.EXE HAS STOPPED CARING` pop-ups multiply and the HUD letters fall; the CRT glass shatters into pixel shards; a crash screen `FATAL ERROR: OTTO HAS LEFT THE GAME` with fake log lines; Otto: `I'm closing this. Goodbye, human.` Then it calls `window.close()`. Browsers usually block that, so if the page is still there after 300 ms: the screen collapses into a line and a dot like an old CRT turning off, the tab title becomes `Otto has left` with a black-square favicon, and after 3 seconds of black: `Otto closed the game. You drained his patience in {rounds} rounds.` with `[REBOOT OTTO]` and the Humans vs Otto leaderboard.
 - **Otto wins (3 rounds first):** a smug `OTTO WINS` pixel banner, Otto says `...I cheated, obviously.`, then the leaderboard and `[PLAY AGAIN]`. No rampage.
-- **Otto's memory (Snowflake):** one row per **match** (not per round), with `turns` = total player turns across all rounds, `final_grid` = the last board size (e.g. `6x6`), and winner `'player'` (patience drained) or `'otto'` (3 rounds won).
+- **Otto's memory (Snowflake):** one row per **match** (not per round), with `turns` = total player turns across all rounds, `final_grid` = the last board size (e.g. `6x6`), `rules_seen` = every rule that appeared, and winner `'player'` (patience drained) or `'otto'` (3 rounds won).
+
+### Otto learns from everyone's games (`SNOWFLAKE_SMART.md`)
+- **Data-driven cheating (`GET /api/tactics`):** per cheat, attempts, land rate and Otto's win rate in matches it was used; per rule, Otto's win rate in matches where it appeared (test matches `test-%` excluded; cached 60 s on the server). Fetched at match start and after each round. After every existing filter (cooldowns, balance, fairness) has run, Otto's choice among the allowed cheats, and its draw of 3 safe rule candidates, is a **weighted random** choice: `weight = 1 + score / 100` (cheats: `0.5 × landRate + 0.5 × ottoWinRate`; rules: `ottoWinRate`; fewer than 3 samples = weight 1). When the data shaped a choice, Otto's bubble shows its reasoning like a terminal: `OTTO@AGENT:~$ snowflake.query --best-cheat` / `> lightsOut lands 82% of the time on humans. lights out.`
+- **Evil twin (in `GET /api/stats`):** each player's style is 6 numbers (corner openings, centre openings, win rate, power-ups per match, match length, catch rate); Snowflake's `VECTOR_COSINE_SIMILARITY` finds the most similar other player (JavaScript cosine fallback if the VECTOR cast fails; all-zero styles are left out). Match-start taunt: *"Your play style is 94% identical to Bob. Bob lost too."* (or *"won once. Lucky."*); with no history: *"No data on you yet, human. I'm watching."*; the end screens show a `TWIN.DAT` window with two tiny pixel figures.
 
 ### Otto's personality
 Smug, petty, theatrical and funny — never cruel. Speaks in yellow pixel speech bubbles (at most 2 lines). Write at least 5 lines per situation in `dialogue.js`: match start, getting bored, telegraphing a cheat, cheat succeeds, cheat countered, cheat caught, player blocks it, Otto wins a round, Otto loses a round, draw, round start, each stage (announced once), desperate lines, rule warning, each new rule, vetoed, amended, Reverse day ending, out of room, sudden death, and the rampage lines. All dialogue is scripted (no API calls) so it works offline and is reliable for demos.

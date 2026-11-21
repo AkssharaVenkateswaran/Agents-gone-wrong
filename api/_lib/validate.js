@@ -6,11 +6,13 @@
 import { CHEATS } from '../../src/cheats.js';
 import { POWERUPS } from '../../src/powerups.js';
 import { FIRST_MOVES, WINNERS, cleanName } from '../../src/matchLog.js';
+import { RULES } from '../../src/rules.js';
 
 export { cleanName };
 
 const CHEAT_IDS = new Set(CHEATS.map((cheat) => cheat.id));
 const POWERUP_IDS = new Set(POWERUPS.map((powerUp) => powerUp.id));
+const RULE_IDS = new Set(RULES.map((rule) => rule.id));
 const MAX_LIST_LENGTH = 200; // no real match gets anywhere near this
 
 function cleanIdList(list, allowed) {
@@ -46,5 +48,9 @@ export function validateMatch(body) {
     return { error: 'finalGrid must look like 5x5' };
   }
 
-  return { match: { playerName, firstMove, cheatsUsed, cheatsCaught, powerupsUsed, winner: body.winner, turns, finalGrid } };
+  // Optional: every rule that appeared during the match (only real rule ids).
+  const rulesSeen = body.rulesSeen === undefined ? [] : cleanIdList(body.rulesSeen, RULE_IDS);
+  if (!rulesSeen) return { error: 'Unknown rule id' };
+
+  return { match: { playerName, firstMove, cheatsUsed, cheatsCaught, powerupsUsed, winner: body.winner, turns, finalGrid, rulesSeen } };
 }

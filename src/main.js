@@ -25,6 +25,8 @@ import {
   stageOf,
   PATIENCE_LOST_ROUND,
   PATIENCE_WON_ROUND,
+  PATIENCE_DRAW,
+  PATIENCE_CAUGHT,
 } from './agent.js';
 import { getCheat } from './cheats.js';
 import { getPowerUp, canAfford } from './powerups.js';
@@ -55,7 +57,8 @@ import {
   pickSome,
 } from './ai.js';
 import { say, sayRule, sayFromMemory, sayCatchRate, shout, RAMPAGE_LINES } from './dialogue.js';
-import { fetchStats, saveMatch } from './memory.js';
+import { fetchStats, saveMatch, fetchTactics } from './memory.js';
+import { cheatReasoning, ruleReasoning } from './tactics.js';
 import { FIRST_MOVES, cleanName } from './matchLog.js';
 import { sfx, setMuted, setDetune, startBuzz, stopBuzz } from './sfx.js';
 import {
@@ -281,6 +284,7 @@ async function startPlayerTurn() {
     twist.expiresAtTurn++;
   }
   if (expireRules(state)) {
+    noteRules();
     talk(say('ruleExpired'));
     state.notice = 'Reverse day is over. Lines win again.';
   }
@@ -386,6 +390,7 @@ function activatePowerUp(id) {
     const category = getRule(vetoedId).category;
     powerUp.apply(state);
     const restored = getRule(state.rules[category].ruleId);
+    noteRules();
     state.notice = `Vetoed "${getRule(vetoedId).name}". Back to "${restored.name}".`;
     talk(say('vetoed'));
     showExample(restored.id);
@@ -521,9 +526,11 @@ async function ruleChangeScene() {
   state.lastRuleChange = change;
 
   // 1-2. Show the pop-up; wait for [ OK ] or 4 seconds.
+  noteRules();
   musicEvent('ruleChange'); // record scratch, then bass only while the pop-up is open
   state.ruleScene = { phase: 'show', change };
-  talk(sayRule(change.ruleId));
+  if (change.dataDriven) state.ottoSays = ruleReasoning(state.tactics, getRule(change.ruleId));
+  else talk(sayRule(change.ruleId));
   state.notice = '';
   emit('change');
   const myGeneration = generation;
@@ -574,7 +581,7 @@ async function ottoTurn() {
   // A cheat (rarely: never early, at most 1 per 3 turns, never one that decides the round).
   const picked = pickCheat(state);
   if (picked) {
-    const { cheat, trial } = picked;
+    const { cheat, trial, dataDriven } = picked;
     state.lastCheatTry = state.turnNumber;
     // Telegraph: Otto's screen flickers ">:)". The player can click Otto now.
     state.telegraph = cheat.id;
@@ -582,6 +589,8 @@ async function ottoTurn() {
     // Sometimes Otto brags with a real stat: "Only 23% of humans catch my Mark Steal."
     const brag = sayCatchRate(state.memory.stats, cheat.id, cheat.name);
     if (brag && Math.random() < 0.4) state.ottoSays = brag;
+    // If everyone's games shaped this pick, Otto shows its reasoning like a terminal.
+    if (dataDriven) state.ottoSays = cheatReasoning(state.tactics, cheat);
     emit('change');
     if (!(await pause(TELEGRAPH_MS))) return;
 
@@ -613,13 +622,30 @@ function catchCheat() {
   state.cooldowns[cheat.id] = cheat.cooldown; // a caught cheat still goes on cooldown
   state.stats.cheatsCaught++;
   state.log.cheatsCaught.push(cheat.id);
-  talk(say('cheatCaught')); // (catching doesn't change patience; only round results do)
-  state.notice = `CAUGHT! Otto was about to use ${cheat.name}.`;
+  talk(say('cheatCaught'));
+  state.notice = `CAUGHT! Otto was about to use ${cheat.name}. (Otto's patience ${PATIENCE_CAUGHT})`;
   earn(POINTS.catchCheat);
+  setPatience(state, state.patience + PATIENCE_CAUGHT); // getting caught costs Otto patience
+  updateStageEffects();
   emit('change');
   sfx.caught();
   musicEvent('cheatCaught');
   showPopup('CAUGHT!');
+  if (state.patience <= 0) patienceRanOut();
+}
+
+// Otto's patience hit 0 in the middle of a round (by catching a cheat): the match is won.
+async function patienceRanOut() {
+  generation++; // stop Otto's unfinished turn
+  stopTurnTimer();
+  state.roundOver = true;
+  state.matchOver = true;
+  state.result = 'X';
+  state.telegraph = null;
+  state.ottoThinking = false;
+  emit('change');
+  if (!(await pause(1500))) return;
+  startRampage();
 }
 
 // Apply a cheat whose result was already checked by simulateCheat() (see agent.js).
@@ -737,6 +763,7 @@ async function endRound(winner, line, ottoLine) {
     sfx.lose();
     musicEvent('roundWonByOtto');
   } else {
+    setPatience(state, before + PATIENCE_DRAW); // even a draw wears Otto down
     talk(ottoLine || say('draw'));
   }
   updateStageEffects();
@@ -775,6 +802,8 @@ async function endRound(winner, line, ottoLine) {
 
 function nextRound() {
   startNextRound();
+  noteRules();
+  loadTactics(); // refreshed after each round (in the background)
   // Each stage of Otto falling apart is announced once.
   const now = stage();
   if (now > state.announcedStage) {
@@ -866,6 +895,23 @@ async function loadMemory() {
   emit('change');
 }
 
+// What beats humans across everyone's games. Fetched at match start and after each
+// round; if Snowflake is down Otto just chooses without it.
+async function loadTactics() {
+  const myGeneration = generation;
+  const tactics = await fetchTactics();
+  if (myGeneration !== generation) return;
+  if (tactics) state.tactics = tactics;
+}
+
+// Remember every rule that appears in the match (saved as rules_seen).
+function noteRules() {
+  for (const category of ['win', 'placement', 'twist']) {
+    const id = state.rules[category].ruleId;
+    if (!state.log.rulesSeen.includes(id)) state.log.rulesSeen.push(id);
+  }
+}
+
 // At the end of a match: save ONE row for the match, then reload the stats for the leaderboard.
 async function rememberMatch(winner) {
   if (state.log.saved) return; // only once per match
@@ -882,6 +928,7 @@ async function rememberMatch(winner) {
     winner: winner === 'X' ? 'player' : 'otto',
     turns: state.totalTurns,
     finalGrid: `${state.board.rows}x${state.board.cols}`,
+    rulesSeen: state.log.rulesSeen,
   });
   const stats = await fetchStats(state.playerName);
   if (myGeneration !== generation) return;
@@ -916,8 +963,10 @@ function playAgain() {
   setMusicStageOverride(null);
   updateStageEffects();
   startMusic(); // (restarts it after the rampage's tape-stop)
+  noteRules();
   emit('change');
   loadMemory(); // runs in the background
+  loadTactics();
 }
 
 // The title screen's Play button.
@@ -992,6 +1041,7 @@ function debugAction(action, value) {
       const oldId = state.rules[getRule(value).category].ruleId;
       activateRule(state, value);
       state.lastRuleChange = { ruleId: value, oldId, rejected: [], by: 'debug' };
+      noteRules();
       talk(sayRule(value));
       showExample(value);
       startTurnTimer();
@@ -1059,6 +1109,10 @@ function debugAction(action, value) {
     setTimeout(() => musicEvent('tapeStop'), 6000);
     setTimeout(() => startMusic(), 9000);
     state.debug.message = 'Rampage music: speeds up, distorts, tape-stops, then restarts.';
+  } else if (action === 'showTactics') {
+    state.debug.message = `tactics: ${JSON.stringify(state.tactics)}`;
+  } else if (action === 'showTwin') {
+    state.debug.message = `twin: ${JSON.stringify(state.memory.stats?.twin ?? null)} (memory: ${state.memory.status})`;
   } else if (action === 'points') {
     earn(10);
   } else if (action === 'cooldowns') {

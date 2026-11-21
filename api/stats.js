@@ -51,6 +51,69 @@ const LEADERBOARD = `
   ORDER BY wins DESC, matches ASC
   LIMIT 5`;
 
+// --- The evil twin: the other player whose play style is most like yours ---------------------
+// Each player's style is 6 numbers: corner openings, centre openings, win rate, power-ups
+// per match, match length and cheat catch rate. (Our first moves are named like
+// 'top-left corner' and 'centre'.) Test matches are left out.
+const STYLES = `
+  SELECT player_name,
+    AVG(IFF(first_move IN ('top-left corner','top-right corner','bottom-left corner','bottom-right corner'), 1, 0)) AS corner,
+    AVG(IFF(first_move = 'centre', 1, 0)) AS center,
+    AVG(IFF(winner = 'player', 1, 0)) AS winrate,
+    LEAST(COALESCE(AVG(ARRAY_SIZE(powerups_used)), 0) / 10, 1) AS powerups,
+    LEAST(COALESCE(AVG(turns), 0) / 30, 1) AS length,
+    COALESCE(SUM(ARRAY_SIZE(cheats_caught)) /
+      NULLIF(SUM(ARRAY_SIZE(cheats_caught)) + SUM(ARRAY_SIZE(cheats_used)), 0), 0) AS catch_rate
+  FROM GAME_LOGS
+  WHERE match_id NOT LIKE 'test-%' AND player_name IS NOT NULL
+  GROUP BY player_name`;
+
+// Snowflake does the matching with a vector similarity.
+const TWIN = `
+  WITH s AS (${STYLES}),
+  v AS (
+    SELECT player_name, winrate,
+           ARRAY_CONSTRUCT(corner, center, winrate, powerups, length, catch_rate)::VECTOR(FLOAT, 6) AS style
+    FROM s
+    -- an all-zero style has no direction (its similarity would be NaN), so leave it out
+    WHERE corner + center + winrate + powerups + length + catch_rate > 0
+  )
+  SELECT b.player_name AS twin, ROUND(100 * VECTOR_COSINE_SIMILARITY(a.style, b.style)) AS similarity, b.winrate
+  FROM v a JOIN v b ON a.player_name = ? AND b.player_name <> a.player_name
+  ORDER BY similarity DESC
+  LIMIT 1`;
+
+function cosine(a, b) {
+  const dot = a.reduce((sum, x, i) => sum + x * b[i], 0);
+  const size = (v) => Math.sqrt(v.reduce((sum, x) => sum + x * x, 0));
+  return size(a) && size(b) ? dot / (size(a) * size(b)) : 0;
+}
+
+// The twin as { name, similarity, hasWins }, or null (no games yet / nobody else).
+// If the VECTOR cast fails for any reason, the same 6 numbers are compared in JavaScript.
+async function findTwin(player) {
+  try {
+    const [row] = await runQuery(TWIN, [player]);
+    if (!row || !Number.isFinite(Number(row[1]))) return null;
+    return { name: row[0], similarity: Number(row[1]), hasWins: Number(row[2]) > 0 };
+  } catch (err) {
+    console.log('Twin: VECTOR query failed, using the JavaScript fallback:', err.message);
+    const rows = await runQuery(STYLES);
+    const styles = rows
+      .map(([name, ...numbers]) => ({ name, style: numbers.map(Number) }))
+      .filter((s) => s.style.some((x) => x > 0)); // all-zero styles have no direction
+    const me = styles.find((s) => s.name === player);
+    if (!me) return null;
+    let best = null;
+    for (const other of styles) {
+      if (other.name === player) continue;
+      const similarity = Math.round(100 * cosine(me.style, other.style));
+      if (!best || similarity > best.similarity) best = { name: other.name, similarity, hasWins: other.style[2] > 0 };
+    }
+    return best;
+  }
+}
+
 const toNumber = (value) => Number(value ?? 0);
 
 export default async function handler(req, res) {
@@ -66,12 +129,13 @@ export default async function handler(req, res) {
 
   try {
     // All queries at once, so the answer comes back quickly.
-    const [firstMove, record, totals, rates, leaders] = await Promise.all([
+    const [firstMove, record, totals, rates, leaders, twin] = await Promise.all([
       player ? runQuery(FIRST_MOVE, [player]) : [],
       player ? runQuery(PLAYER_RECORD, [player]) : [],
       runQuery(TOTALS),
       runQuery(CATCH_RATES),
       runQuery(LEADERBOARD),
+      player ? findTwin(player) : null,
     ]);
 
     const catchRates = {};
@@ -93,6 +157,7 @@ export default async function handler(req, res) {
         ottoWins: toNumber(totals[0]?.[2]),
         catchRates,
       },
+      twin, // { name, similarity, hasWins } or null
       leaderboard: leaders.map(([name, wins, matches]) => ({
         name,
         wins: toNumber(wins),

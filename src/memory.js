@@ -23,6 +23,11 @@ export function fetchStats(playerName) {
   return callApi(`/api/stats?player=${encodeURIComponent(playerName)}`);
 }
 
+// What works best against humans across everyone's games, or null.
+export function fetchTactics() {
+  return callApi('/api/tactics');
+}
+
 // Save a finished match. Resolves to the API's answer, or null.
 export function saveMatch(match) {
   return callApi('/api/match', {

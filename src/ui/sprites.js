@@ -611,3 +611,15 @@ export const NOTE_OFF = outlined([
   'llll.pl',
   '.ll...p',
 ]);
+
+// A tiny pixel person (for TWIN.DAT: you and your evil twin). `colour` is a palette letter.
+export function tinyFigure(colour) {
+  return outlined([
+    '.cc.',
+    '.cc.',
+    'cccc',
+    'c..c',
+    '.cc.',
+    '.c.c',
+  ].map((row) => row.replaceAll('c', colour)));
+}

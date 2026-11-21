@@ -22,6 +22,7 @@ import {
   activateRule,
   fadeOldMarks,
 } from './rules.js';
+import { ruleScore, weightOf, weightedSample } from './tactics.js';
 
 const other = (mark) => (mark === 'X' ? 'O' : 'X');
 
@@ -43,13 +44,13 @@ function makesLine(state, landing, mark) {
 //   block:   chance it blocks the player's winning threat
 //   best:    chance it plays its best square (otherwise a random square next to existing marks)
 // scripts/balance-test.mjs simulates 1000s of games to tune these numbers.
-// Tuned with scripts/balance-test.mjs so the test bot wins about 60% against a
-// calm Otto (patience 100-76) and about 40% against a furious one (25-0).
+// Tuned with scripts/balance-test.mjs so the test bot wins about 70% of rounds
+// against Otto at patience 100-51, about 55% at 50-1, and ~80% of whole matches.
 export const SKILL = [
-  { minPatience: 76, takeWin: 0.74, block: 0.6, best: 0.64 },
-  { minPatience: 51, takeWin: 0.84, block: 0.72, best: 0.77 },
-  { minPatience: 26, takeWin: 0.92, block: 0.82, best: 0.86 },
-  { minPatience: 0, takeWin: 1, block: 0.9, best: 0.92 },
+  { minPatience: 76, takeWin: 0.26, block: 0.18, best: 0.22 },
+  { minPatience: 51, takeWin: 0.31, block: 0.22, best: 0.27 },
+  { minPatience: 26, takeWin: 0.55, block: 0.43, best: 0.48 },
+  { minPatience: 0, takeWin: 0.57, block: 0.45, best: 0.5 },
 ];
 
 export function skillFor(state) {
@@ -263,12 +264,14 @@ export function pickSome(ids, count) {
 
 // Otto draws 3 random SAFE rules and keeps the one that helps it most.
 // Returns { ruleId, rejected } or null if no rule can safely change (then the change is postponed).
+// (The 3 are drawn weighted by how often Otto wins with each rule across everyone's games.)
 export function ottoRewriteRules(state) {
-  const drawn = pickSome(safeRuleIds(state), 3);
+  const drawn = weightedSample(safeRuleIds(state), 3, (id) => weightOf(ruleScore(state.tactics, id)));
   if (drawn.length === 0) return null;
   const ruleId = highestBy(drawn, (id) => ruleValueForOtto(state, id));
   activateRule(state, ruleId);
-  const change = { ruleId, rejected: drawn.filter((id) => id !== ruleId), by: 'otto' };
+  const dataDriven = ruleScore(state.tactics, ruleId) !== null;
+  const change = { ruleId, rejected: drawn.filter((id) => id !== ruleId), by: 'otto', dataDriven };
   state.lastRuleChange = change;
   return change;
 }
