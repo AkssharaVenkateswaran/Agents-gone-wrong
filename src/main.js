@@ -13,7 +13,7 @@
 import './styles.css';
 import { state, on, emit, resetMatch, MAX_TURNS } from './state.js';
 import { emptyCells, addRow, addColumn, linesOf, LINE_LENGTH } from './board.js';
-import { chooseMove, pickCheat, addFrustration, tickCooldowns } from './agent.js';
+import { chooseMove, pickCheat, commitCheat, addFrustration, tickCooldowns } from './agent.js';
 import { getCheat } from './cheats.js';
 import { getPowerUp, canAfford } from './powerups.js';
 import { addPoints, POINTS, QUICK_COUNTER_TURNS, RULE_BONUS_TURNS } from './scoring.js';
@@ -35,7 +35,7 @@ import {
   activateRule,
   currentTurn,
 } from './rules.js';
-import { ottoRewriteRules, findWinningSquare } from './ai.js';
+import { ottoRewriteRules, findWinningSquare, winningSquares } from './ai.js';
 import { say, sayRule, sayFromMemory, sayCatchRate } from './dialogue.js';
 import { fetchStats, saveMatch } from './memory.js';
 import { FIRST_MOVES, cleanName } from './matchLog.js';
@@ -147,6 +147,7 @@ function playerPlace(landing) {
   placeMove(state, landing, 'X');
   sfx.place();
   state.notice = '';
+  state.threatCells = null;
   earn(POINTS.placeX);
 
   if (landing === ottoThreat) {
@@ -205,6 +206,16 @@ async function startPlayerTurn() {
   } else if (state.nextRuleAt - state.playerTurns === 1) {
     // One turn of warning before the rules change.
     state.ottoSays = state.stats.rulesChanged === 0 ? say('solved') : say('ruleTelegraph');
+  }
+
+  // Tutorial (first match only): point out where Otto is about to win.
+  state.threatCells = null;
+  if (state.tutorial && !isReverseDay(state)) {
+    const threats = winningSquares(state, 'O');
+    if (threats.length > 0) {
+      state.threatCells = threats;
+      state.ottoSays = "> threat: you're about to lose, human";
+    }
   }
 
   emit('change');
@@ -463,8 +474,11 @@ async function ottoTurn() {
   if (!(await pause(THINK_MIN_MS + Math.random() * THINK_EXTRA_MS))) return;
   state.ottoThinking = false;
 
-  const cheat = pickCheat(state); // never during a grace turn (see agent.js)
-  if (cheat) {
+  // A cheat (rarely: never early, at most 1 per 3 turns, never one that decides the match).
+  const picked = pickCheat(state);
+  if (picked) {
+    const { cheat, trial } = picked;
+    state.lastCheatTry = state.turnNumber;
     // Telegraph: Otto's screen flickers ">:)". The player can click Otto now.
     state.telegraph = cheat.id;
     state.ottoSays = say(cheat.id === 'rewriteRules' ? 'ruleTelegraph' : 'telegraph');
@@ -476,7 +490,7 @@ async function ottoTurn() {
 
     if (state.telegraph === cheat.id) {
       state.telegraph = null;
-      runCheat(cheat);
+      runCheat(cheat, trial);
       if (state.matchOver) return;
       if (cheat.replacesMove) {
         endOttoTurn(); // the cheat already placed Otto's mark(s)
@@ -511,8 +525,9 @@ function catchCheat() {
   showPopup('CAUGHT!');
 }
 
-function runCheat(cheat) {
-  cheat.apply(state);
+// Apply a cheat whose result was already checked by simulateCheat() (see agent.js).
+function runCheat(cheat, trial) {
+  commitCheat(state, trial);
   state.cooldowns[cheat.id] = cheat.cooldown;
   state.lastCheat = { id: cheat.id, turnNumber: state.turnNumber };
   state.cheatLandedAt[cheat.id] = state.turnNumber;
@@ -604,7 +619,9 @@ async function endMatch(winner, line) {
   state.telegraph = null;
   state.ottoThinking = false;
   state.mode = null;
+  state.threatCells = null;
   state.lightsOut = null; // lights back on so the player can see the result
+  state.session.played++; // the next match is the next "match number"
 
   if (winner === 'X') {
     earn(POINTS.winMatch);

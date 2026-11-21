@@ -337,6 +337,9 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
 .cell.lava { background-image: var(--dither-pink); background-size: 8px 8px; }
 .cell.target { outline: 3px dashed var(--lime); outline-offset: -5px; }
 .cell.fading .mark { opacity: 0.45; }
+/* Tutorial: the square where Otto is about to win pulses gently (slow fade, no flashing). */
+.cell.threat { outline: 4px solid var(--yellow); outline-offset: -6px; animation: threat-pulse 2.4s ease-in-out infinite; }
+@keyframes threat-pulse { 50% { outline-color: rgba(255, 228, 92, 0.35); } }
 .tag {
   position: absolute;
   bottom: 2px;
@@ -661,7 +664,7 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
 /* --- Reduced motion: nothing drifts, bounces, spins or flies. --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .drift, .dots i, .otto-face.think .f1, .otto-face.think .f2, .otto-face.flicker,
-  .cell.dissolve .mark, .cell.pop-in, .board.spin-in, .monitor.flip, .disk.inserting,
+  .cell.threat, .cell.dissolve .mark, .cell.pop-in, .board.spin-in, .monitor.flip, .disk.inserting,
   .confetti i, .rule-popup-stack > .window, .point-pop { animation: none; }
   .otto-face.think .f2 { display: none; }
   .rule-popup-stack { transition: opacity 0.3s steps(2); }

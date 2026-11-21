@@ -1,5 +1,5 @@
 // board.js
-// The grid model, win detection, minimax, and helpers to grow / shrink / spin the grid.
+// The grid model, win detection, and helpers to grow / shrink / spin the grid.
 //
 // A board is a plain object: { rows, cols, cells, minions, stolen, glued, age, stamp }
 //   Every "layer" is a flat array with one entry per square (length rows * cols).
@@ -34,7 +34,7 @@ export function createBoard(rows, cols) {
   return board;
 }
 
-// Make an independent copy (so minimax can try moves without
+// Make an independent copy (so Otto can try moves without
 // changing the real board).
 export function cloneBoard(board) {
   const copy = { rows: board.rows, cols: board.cols };
@@ -104,74 +104,10 @@ export function findLine(board, mark = null, length = LINE_LENGTH, directions = 
   return null;
 }
 
-// The classic check (3 in a row, any direction) — used by minimax on 3x3.
-export function findWinner(board) {
-  return findLine(board);
-}
-
 // All the separate lines of `length` a mark has (overlapping ones count too,
 // so 4 in a row = 2 lines of 3). Used by the FINAL RULE.
 export function linesOf(board, mark, length = LINE_LENGTH) {
   return allLines(board, length).filter((line) => line.every((i) => board.cells[i] === mark));
-}
-
-// If `mark` can win right now (classic rules), return that square's index. Otherwise -1.
-export function findWinningMove(board, mark, candidates = emptyCells(board)) {
-  for (const i of candidates) {
-    board.cells[i] = mark; // try it...
-    const winner = findWinner(board);
-    board.cells[i] = null; // ...and undo it
-    if (winner && winner.mark === mark) return i;
-  }
-  return -1;
-}
-
-// --- Minimax (standard 3x3 grid only) ------------------------------------
-// Minimax tries every possible future game and picks the move that is best
-// assuming the opponent also plays perfectly.
-// Scores (from the point of view of `me`):
-//   +10 for a win, -10 for a loss, 0 for a draw.
-// We subtract/add the depth so a FASTER win (or a SLOWER loss) is preferred.
-
-function minimax(board, me, current, depth) {
-  const winner = findWinner(board);
-  if (winner) return winner.mark === me ? 10 - depth : depth - 10;
-  if (isFull(board)) return 0;
-
-  const other = current === 'X' ? 'O' : 'X';
-  let best = current === me ? -Infinity : Infinity;
-
-  for (const i of emptyCells(board)) {
-    board.cells[i] = current;                     // try the move
-    const score = minimax(board, me, other, depth + 1);
-    board.cells[i] = null;                        // undo it
-
-    if (current === me) best = Math.max(best, score); // my turn: maximise
-    else best = Math.min(best, score);                // their turn: minimise
-  }
-  return best;
-}
-
-// Returns the index of the best square for `mark` to play.
-export function bestMove(board, mark) {
-  const copy = cloneBoard(board);
-  const other = mark === 'X' ? 'O' : 'X';
-  let bestScore = -Infinity;
-  let bestIndexes = [];
-
-  for (const i of emptyCells(copy)) {
-    copy.cells[i] = mark;
-    const score = minimax(copy, mark, other, 1);
-    copy.cells[i] = null;
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestIndexes = [i];
-    } else if (score === bestScore) {
-      bestIndexes.push(i); // keep ties so Otto doesn't always play the same game
-    }
-  }
-  return pickRandom(bestIndexes);
 }
 
 // --- Growing, shrinking and spinning the grid ----------------------------

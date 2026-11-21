@@ -441,6 +441,7 @@ function renderCells() {
       if (targetCells?.includes(i) && !mark) classes.push('target');
       if (state.mode?.type === 'flick' && minions[i]) classes.push('target');
       if (glow.includes(i)) classes.push('rule-glow');
+      if (state.threatCells?.includes(i)) classes.push('threat'); // tutorial: Otto wins here next
       if (placement === 'lava' && isCorner) classes.push('lava');
       if (grew && (r >= prev.rows || c >= prev.cols)) classes.push('pop-in');
 
@@ -469,6 +470,7 @@ function renderCells() {
         content += '<span class="tag tag-glued" aria-hidden="true">GLUED</span>';
       }
       if (placement === 'lava' && isCorner && !mark) label += ' (lava: nobody can play here)';
+      if (state.threatCells?.includes(i)) label += ' (Otto is about to win here!)';
 
       return `<button class="${classes.join(' ')}" data-cell="${i}"
                 aria-label="Row ${r + 1}, column ${c + 1}: ${label}"

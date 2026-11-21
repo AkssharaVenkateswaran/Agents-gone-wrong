@@ -55,7 +55,8 @@ export const RULES = [
   {
     id: 'five', category: 'win',
     name: '5 in a row', sentence: 'You now need 5 in a row to win.',
-    available: (state) => winSettings(state).length === 4,
+    // Never 5 in a row on a board smaller than 6x6.
+    available: (state) => winSettings(state).length === 4 && state.board.rows >= 6 && state.board.cols >= 6,
     settings: () => ({ length: 5, dirs: 'all' }),
   },
   {
@@ -141,17 +142,6 @@ export function isActive(state, ruleId) {
 // What a winning line looks like right now: { length, dirs: 'all'|'straight'|'diagonal' }
 export function winSettings(state) {
   return state.rules.win.settings;
-}
-
-// Is the game still using the original rules? (Then Otto can use perfect minimax.)
-export function isClassic(state) {
-  return (
-    state.rules.win.ruleId === 'three' &&
-    state.rules.placement.ruleId === 'anywhere' &&
-    state.rules.twist.ruleId === 'noTwist' &&
-    state.board.rows === 3 &&
-    state.board.cols === 3
-  );
 }
 
 // --- Changing the rules --------------------------------------------------------------

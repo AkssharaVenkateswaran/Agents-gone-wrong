@@ -15,9 +15,9 @@ Suggested structure:
 src/
   main.js          // boots the game, wires modules together
   state.js         // single game state object + simple event emitter (on/emit)
-  board.js         // grid model (grows up to 9x9), lines of any length/direction, minimax for classic 3x3
+  board.js         // grid model (grows up to 9x9), lines of any length/direction
   rules.js         // the rule categories (win, place, twist), legal moves, placing marks, win checks
-  ai.js            // Otto's moves under the current rules (heuristic) and how it picks new rules
+  ai.js            // Otto's moves under the current rules (heuristic + mistakes by patience) and how it picks new rules
   agent.js         // Otto's brain: chooses between a normal move and a cheat, tracks frustration
   cheats.js        // each cheat: { id, name, cooldown, canUse(state), apply(state), undo(state) }
   powerups.js      // each power-up: { id, name, cost, canUse(state), apply(state) }
@@ -36,8 +36,10 @@ src/
 ## Game rules
 
 ### Match structure: one long, evolving round
-- The whole match is **one long round** on a board that starts at 3×3. The first player to meet the **current** win condition wins the match.
-- It opens as classic tic-tac-toe: Otto plays perfect minimax and plays fair. Just before the first rule change Otto realises *"Wait... this game is SOLVED. Nobody can win. Ugh. Boring. New rules."* — from then on it also cheats and rewrites the rules.
+- The whole match is **one long round**. The first player to meet the **current** win condition wins the match.
+- A player's first 2 matches start with **WIN: 4 IN A ROW on a 5×5 board**; later matches start as classic 3×3 with 3 in a row. ("3 in a row" on a board 4+ squares wide is a forced win for the first player, so the first matches use 4 in a row.)
+- Otto plays fair until the first rule change and **can't win before it**. Just before it, Otto realises *"Wait... this game is SOLVED. Nobody can win. Ugh. Boring. New rules."* — from then on it also cheats and rewrites the rules.
+- **Tutorial (first match only):** when Otto is one move from winning, the threatened square pulses gently and Otto says `> threat: you're about to lose, human`.
 - The board can grow up to **9×9**; new squares pop in. If the board fills up, Otto is forced to add a row or column.
 - **FINAL RULE:** when the board reaches 9×9, or after **30 player turns**, the match ends with *"FINAL RULE: most lines of 3 wins"*: every line of 3 in any direction is counted (overlapping lines count too) and the higher count wins (equal = draw).
 - The top bar shows the session score: matches won by you vs Otto since the page loaded.
@@ -45,7 +47,16 @@ src/
 ### Pacing (the player always gets a fair chance)
 - Otto waits 400ms after the player's move, then "thinks" for 1.2–1.8 seconds (random) before every move: its eyes look around, three dots hop in its bubble, and the turn indicator says `> OTTO IS THINKING...`. On the player's turn it says `> YOUR TURN_`.
 - Otto has a **Frustration meter** (0–100), shown as `OTTO'S PATIENCE` (100 − frustration). It rises as the game drags on, when the player blocks Otto, catches or counters a cheat, or vetoes a rule. Higher frustration = more frequent and nastier cheats.
-- Otto can cheat **at most once per turn**. Each cheat has a **cooldown** (a few turns). It never cheats before the first rule change.
+- **Otto makes mistakes**, fewer as it gets angrier. On each normal move it takes its own winning move, blocks the player's winning threat, and otherwise plays its best square (else a random square next to existing marks) with these chances, on every board size and rule. They are tuned with `npm run balance` (`scripts/balance-test.mjs`) so a simple player bot wins about 60% against a calm Otto and about 40% against a furious one:
+  | Patience | Takes its win | Blocks the player | Plays its best square |
+  |---|---|---|---|
+  | 100–76 | 74% | 60% | 64% |
+  | 75–51 | 84% | 72% | 77% |
+  | 50–26 | 92% | 82% | 86% |
+  | 25–0 | 100% | 90% | 92% |
+- Otto's "best square" looks one move ahead and avoids squares that let the player set up two threats at once.
+- **Cheats are rare and never decide the match:** at most 1 cheat attempt every 3 Otto turns, none in Otto's first 2 turns, none before the first rule change. Each cheat is first tried on a copy of the game and skipped if it would complete a winning line for Otto or remove the player's only winning move.
+- Each cheat also has a **cooldown** (a few turns).
 - **Telegraph every cheat:** ~1 second before a cheat, Otto's screen flickers `>:)` and it says "hehe…" in its bubble. If the player clicks Otto (or presses C) during this window they **Catch** the cheat: it's blocked, they get bonus points, and a small `CAUGHT!` pixel window pops up with a stamp effect.
 
 ### Rules (Otto keeps rewriting them)
@@ -98,8 +109,8 @@ Keyboard shortcuts: 1–9 and 0 for the 10 power-ups.
 Power-ups are pixel floppy disks in the `TOOLBOX.EXE` window on the left, each with its name on the label and its cost as a pixel number. Unaffordable or currently useless power-ups are greyed out.
 
 ### Earning points
-- Start each match with 3 points
-- +1 for each X placed
+- Start each match with 6 points
+- +2 for each X placed
 - +3 for blocking a row where Otto had two in a row
 - +2 for countering a cheat within 2 turns of it happening
 - +4 for catching a cheat during its telegraph window
@@ -109,7 +120,7 @@ Power-ups are pixel floppy disks in the `TOOLBOX.EXE` window on the left, each w
 Show point gains as small "+3" pixel pops that float up and fade.
 
 ### Win detection
-Must work on **any grid size** (up to 9×9) and for the **current** win rule: any line length (3–5) and only the allowed directions (all, across/down only, or diagonals only). Squares covered by minions can't be clicked and don't count toward anyone's line. A line only counts if it includes a mark placed since the last rule change. On Reverse day, whoever makes a line loses. Minimax is only used for the classic 3×3 game with the default rules; everywhere else Otto uses a heuristic that follows the current rules: win if possible → block if needed → extend its longest open line.
+Must work on **any grid size** (up to 9×9) and for the **current** win rule: any line length (3–5) and only the allowed directions (all, across/down only, or diagonals only). Squares covered by minions can't be clicked and don't count toward anyone's line. A line only counts if it includes a mark placed since the last rule change. On Reverse day, whoever makes a line loses. Otto uses one heuristic everywhere, following the current rules (with the mistake chances above): win if possible → block if needed → its best square.
 
 ### Ending
 - **Player wins the match:** Otto has a meltdown (*"It's SOLVED. It was always solved. Why do I even—"*), its monitor shows a pixel "crash" screen, the table flips (the big CRT monitor flies off the desk), and a full-screen `YOU WIN!` pixel banner appears with pixel confetti.
@@ -166,7 +177,7 @@ Smug, petty, theatrical and funny — never cruel. Speaks in yellow pixel speech
 
 ## Build in milestones
 After each milestone, make sure `npm run dev` runs without errors and summarise what changed before moving on.
-1. **Playable core:** 3×3 board, player vs Otto (minimax), win/draw detection and match flow. Plain styling is fine.
+1. **Playable core:** 3×3 board, player vs Otto, win/draw detection and match flow. Plain styling is fine.
 2. **Cheats:** cheat system with telegraph, catch, cooldowns and the Frustration meter; implement all 6 cheats.
 3. **Power-ups & points:** scoring, the toolbox, all 8 power-ups, and win detection on a grown grid.
 4. **Art pass:** apply the retro pixel-art direction to every element, including Otto's expressions, speech bubbles, OS windows and pop-ups.

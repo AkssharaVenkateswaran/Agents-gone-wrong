@@ -14,7 +14,7 @@ export const MAX_TURNS = 30; // after 30 player turns the FINAL RULE decides the
 export const state = {
   screen: 'title',         // 'title' (enter your name) or 'game'
   playerName: '',          // sent to Otto's memory (max 20 characters)
-  session: { you: 0, otto: 0 }, // matches won since the page loaded (top bar score)
+  session: { you: 0, otto: 0, played: 0 }, // matches since the page loaded (top bar score)
   muted: false,            // sound effects on/off
 
   board: createBoard(3, 3),
@@ -72,7 +72,8 @@ export const state = {
 
   // Debug panel: open the game with ?debug in the URL.
   debug: {
-    enabled: new URLSearchParams(location.search).has('debug'),
+    // (`location` only exists in the browser, not in scripts/balance-test.mjs)
+    enabled: typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug'),
     forceCheat: null,      // id of a cheat Otto MUST try on its next turn
     message: '',
   },
@@ -86,10 +87,29 @@ function newStats() {
   return { cheatsUsed: 0, cheatsCaught: 0, powerUpsUsed: 0, pointsEarned: 0, rulesChanged: 0 };
 }
 
-// Reset everything for a brand-new match (the session score and name stay).
-export function resetMatch() {
-  Object.assign(state, {
-    board: createBoard(3, 3),
+// The first 2 matches start with WIN: 4 IN A ROW on a 5x5 board (later ones: classic
+// 3x3, 3 in a row). "3 in a row" on a board 4+ wide is a forced win for whoever moves
+// first, so 4 in a row gives Otto a fair chance — see scripts/balance-test.mjs.
+export const FOUR_IN_A_ROW_MATCHES = 2;
+
+// The rules a match starts with.
+function startingRules(matchNumber) {
+  const rules = defaultRules();
+  if (matchNumber <= FOUR_IN_A_ROW_MATCHES) {
+    rules.win = { ruleId: 'four', sinceTurn: 1, previous: null, settings: { length: 4, dirs: 'all' } };
+  }
+  return rules;
+}
+
+// Everything about a brand-new match. `matchNumber` counts from 1 in this session.
+// (A plain function, so scripts/balance-test.mjs can set up matches too.)
+export function freshMatchState(matchNumber = 1) {
+  const rules = startingRules(matchNumber);
+  const size = matchNumber <= FOUR_IN_A_ROW_MATCHES ? 5 : 3; // 5x5 for 4 in a row, classic 3x3 after
+  return {
+    matchNumber,
+    tutorial: matchNumber === 1, // first match: Otto's threats are pointed out
+    board: createBoard(size, size),
     turn: 'X',             // the player always moves first
     playerTurns: 0,
     turnNumber: 0,
@@ -101,7 +121,7 @@ export function resetMatch() {
     winLine: null,
     finalRule: null,
     notice: '',
-    rules: defaultRules(),
+    rules,
     ruleHistory: [],
     newestCategory: null,
     lastRuleChange: null,
@@ -113,11 +133,13 @@ export function resetMatch() {
     ruleScene: null,
     blinkCategory: null,
     highlight: null,
+    threatCells: null,     // tutorial: squares where Otto is about to win
     turnDeadline: null,
     frustration: 0,
     telegraph: null,
     cooldowns: {},
     lastCheat: null,
+    lastCheatTry: -99,     // Otto turn of the last cheat attempt (max 1 cheat per 3 Otto turns)
     lightsOut: null,
     addedLines: [],
     ottoSkipsNextTurn: false,
@@ -129,7 +151,12 @@ export function resetMatch() {
     extraMarks: 0,
     stats: newStats(),
     log: newLog(),
-  });
+  };
+}
+
+// Reset everything for a brand-new match (the session score and name stay).
+export function resetMatch() {
+  Object.assign(state, freshMatchState(state.session.played + 1));
 }
 
 // --- A tiny event emitter ---------------------------------------------

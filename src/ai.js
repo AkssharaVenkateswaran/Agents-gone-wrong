@@ -1,15 +1,15 @@
 // ai.js
 // How Otto chooses moves and rules. Otto has to follow the CURRENT rules too.
 //
-// Minimax (perfect play) only works on the classic 3x3 game — bigger boards have
-// far too many possible games. Everywhere else Otto uses a simple heuristic:
+// Otto plays a simple heuristic, on every board size and under every rule:
 //   1. win if it can
 //   2. block the player if they're about to win
 //   3. otherwise extend its own longest open line
+// ...but it makes mistakes! How often it gets each step right depends on its
+// patience (see SKILL below): a calm Otto is sloppy, an angry Otto is sharp.
 
-import { cloneBoard, bestMove, allLines, isPlayable, pickRandom } from './board.js';
+import { cloneBoard, allLines, isPlayable, pickRandom } from './board.js';
 import {
-  isClassic,
   legalSquares,
   placeMove,
   putMark,
@@ -37,6 +37,30 @@ function makesLine(state, landing, mark) {
   return !!lineFor(trial, mark);
 }
 
+// Otto's skill at each patience level (patience = 100 - frustration).
+//   takeWin: chance it notices and takes its own winning move
+//   block:   chance it blocks the player's winning threat
+//   best:    chance it plays its best square (otherwise a random square next to existing marks)
+// scripts/balance-test.mjs simulates 1000s of games to tune these numbers.
+// Tuned with scripts/balance-test.mjs so the test bot wins about 60% against a
+// calm Otto (patience 100-76) and about 40% against a furious one (25-0).
+export const SKILL = [
+  { minPatience: 76, takeWin: 0.74, block: 0.6, best: 0.64 },
+  { minPatience: 51, takeWin: 0.84, block: 0.72, best: 0.77 },
+  { minPatience: 26, takeWin: 0.92, block: 0.82, best: 0.86 },
+  { minPatience: 0, takeWin: 1, block: 0.9, best: 0.92 },
+];
+
+export function skillFor(state) {
+  const patience = 100 - state.frustration;
+  return SKILL.find((level) => patience >= level.minPatience);
+}
+
+// Every square where `mark` could make a line right now.
+export function winningSquares(state, mark) {
+  return legalSquares(state).filter((i) => makesLine(state, i, mark));
+}
+
 // A square where `mark` could make a line right now, or -1.
 export function findWinningSquare(state, mark) {
   return legalSquares(state).find((i) => makesLine(state, i, mark)) ?? -1;
@@ -61,20 +85,32 @@ function squareScore(state, i, mark) {
   return score + Math.random() * 0.5; // a little randomness breaks ties
 }
 
+// Is square i next to (touching) any mark already on the board?
+function nextToAMark(board, i) {
+  const r = Math.floor(i / board.cols);
+  const c = i % board.cols;
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      const rr = r + dr;
+      const cc = c + dc;
+      if ((dr || dc) && rr >= 0 && rr < board.rows && cc >= 0 && cc < board.cols && board.cells[rr * board.cols + cc]) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// A random "reasonable" square: one next to existing marks (if there is one).
+export function reasonableSquare(state, squares) {
+  const near = squares.filter((i) => nextToAMark(state.board, i));
+  return pickRandom(near.length > 0 ? near : squares);
+}
+
 // Otto's normal move: returns the square its mark lands on.
 export function ottoMove(state) {
-  // Perfect play on classic 3x3 (but not during a grace turn, see below).
-  if (isClassic(state) && !state.ottoGrace) return bestMove(state.board, 'O');
-
-  let moves = legalSquares(state);
+  const moves = legalSquares(state);
   if (moves.length === 0) return undefined;
-
-  // Grace turn: right after a rule change Otto is not allowed to win, so the
-  // player always gets one move under the new rule first.
-  if (state.ottoGrace) {
-    const safe = moves.filter((i) => !makesLine(state, i, 'O'));
-    if (safe.length > 0) moves = safe;
-  }
 
   if (isReverseDay(state)) {
     // Making a line LOSES today: avoid it, and stay away from our own marks.
@@ -83,13 +119,56 @@ export function ottoMove(state) {
     return lowestBy(pool, (i) => squareScore(state, i, 'O'));
   }
 
-  const win = moves.find((i) => makesLine(state, i, 'O'));
-  if (win !== undefined) return win;
+  const skill = skillFor(state);
+  // Otto may not win before the first rule change, or on its grace turn right after one.
+  const mayWin = state.stats.rulesChanged > 0 && !state.ottoGrace;
 
-  const block = moves.find((i) => makesLine(state, i, 'X'));
-  if (block !== undefined) return block;
+  // 1. Its own winning move (if it notices it).
+  const wins = moves.filter((i) => makesLine(state, i, 'O'));
+  if (wins.length > 0 && mayWin && Math.random() < skill.takeWin) return pickRandom(wins);
+  let pool = moves.filter((i) => !wins.includes(i)); // missed (or not allowed to take) the win
+  if (pool.length === 0) pool = moves;
 
-  return highestBy(moves, (i) => squareScore(state, i, 'O'));
+  // 2. Block the player's winning threat (if it notices it).
+  const threats = pool.filter((i) => makesLine(state, i, 'X'));
+  if (threats.length > 0) {
+    if (Math.random() < skill.block) return pickRandom(threats);
+    const elsewhere = pool.filter((i) => !threats.includes(i));
+    if (elsewhere.length > 0) pool = elsewhere; // it didn't see the threat
+  }
+
+  // 3. Its best square, or a random square next to existing marks.
+  if (Math.random() < skill.best) return bestSquare(state, pool);
+  return reasonableSquare(state, pool);
+}
+
+// Otto's best square: of its most promising squares, the one that leaves the
+// player the fewest chances to set up TWO winning threats at once (a "fork",
+// which can't be blocked). Ties go to the square that builds Otto's own lines.
+const CANDIDATES = 8;   // look closely at Otto's 8 most promising squares...
+const REPLIES = 24;     // ...against up to 24 likely replies from the player
+
+function bestSquare(state, pool) {
+  const scored = pool.map((i) => ({ i, score: squareScore(state, i, 'O') }));
+  scored.sort((a, b) => b.score - a.score);
+  let best = null;
+  for (const { i, score } of scored.slice(0, CANDIDATES)) {
+    const afterOtto = trialCopy(state);
+    placeMove(afterOtto, i, 'O');
+    // Danger 1: squares where the player could win straight away.
+    let danger = winningSquares(afterOtto, 'X').length * 100;
+    // Danger 2: replies that would give the player two threats at once.
+    const replies = legalSquares(afterOtto).filter((r) => nextToAMark(afterOtto.board, r)).slice(0, REPLIES);
+    for (const r of replies) {
+      const afterPlayer = trialCopy(afterOtto);
+      placeMove(afterPlayer, r, 'X');
+      if (winningSquares(afterPlayer, 'X').length >= 2) danger += 10;
+    }
+    if (!best || danger < best.danger || (danger === best.danger && score > best.score)) {
+      best = { i, danger, score };
+    }
+  }
+  return best.i;
 }
 
 // The best square for Otto among `squares`, ignoring placement rules
