@@ -15,12 +15,17 @@ Suggested structure:
 src/
   main.js          // boots the game, wires modules together
   state.js         // single game state object + simple event emitter (on/emit)
-  board.js         // grid model, win detection (any grid size), minimax
-  agent.js         // Otto's brain: chooses between a normal move and a cheat
-  cheats.js        // each cheat: { id, name, cooldown, canUse(state), telegraph(), apply(state), undo(state) }
+  board.js         // grid model (grows up to 9x9), lines of any length/direction, minimax for classic 3x3
+  rules.js         // the rule categories (win, place, twist), legal moves, placing marks, win checks
+  ai.js            // Otto's moves under the current rules (heuristic) and how it picks new rules
+  agent.js         // Otto's brain: chooses between a normal move and a cheat, tracks frustration
+  cheats.js        // each cheat: { id, name, cooldown, canUse(state), apply(state), undo(state) }
   powerups.js      // each power-up: { id, name, cost, canUse(state), apply(state) }
   scoring.js       // point rules
-  dialogue.js      // Otto's lines, grouped by situation
+  dialogue.js      // Otto's lines, grouped by situation (plus rule lines and stat-based taunts)
+  memory.js        // talks to /api/stats and /api/match (Otto's memory in Snowflake, see SNOWFLAKE.md)
+  matchLog.js      // what a finished match records; shared with the API's input validation
+  sfx.js           // synthesised retro beeps
   ui/
     render.js      // renders the top bar, TOOLBOX.EXE, the CRT monitor and board, Otto and RULES.TXT from state
     sprites.js     // pixel sprites as string arrays (X, O, Otto's CRT and faces, minion robot, floppy disks, rule icons...)
@@ -30,12 +35,36 @@ src/
 
 ## Game rules
 
-### Match structure
-- A match is **first to 3 round wins**. Draws give no round win.
-- **Round 1:** Otto plays fairly but imperfectly (40% random moves), so the player learns the basics. After round 1 Otto says something like *"Wait... this game is SOLVED. Nobody can win. Ugh. Boring. New rules."*
-- **Round 2 onward:** Otto plays perfect minimax AND cheats. Otto has a **Frustration meter** (0–100, shown in the HUD) that rises whenever a game heads toward a draw or the player counters a cheat. Higher frustration = more frequent and more chaotic cheats.
-- Otto can cheat **at most once per turn**. Each cheat has a **cooldown** (a few turns).
-- **Telegraph every cheat:** ~1 second before a cheat, Otto's screen flickers `>:)` and it says "hehe…" in its bubble. If the player clicks Otto during this window they **Catch** the cheat: it's blocked, they get bonus points, and a small `CAUGHT!` pixel window pops up with a stamp effect.
+### Match structure: one long, evolving round
+- The whole match is **one long round** on a board that starts at 3×3. The first player to meet the **current** win condition wins the match.
+- It opens as classic tic-tac-toe: Otto plays perfect minimax and plays fair. Just before the first rule change Otto realises *"Wait... this game is SOLVED. Nobody can win. Ugh. Boring. New rules."* — from then on it also cheats and rewrites the rules.
+- The board can grow up to **9×9**; new squares pop in. If the board fills up, Otto is forced to add a row or column.
+- **FINAL RULE:** when the board reaches 9×9, or after **30 player turns**, the match ends with *"FINAL RULE: most lines of 3 wins"*: every line of 3 in any direction is counted (overlapping lines count too) and the higher count wins (equal = draw).
+- The top bar shows the session score: matches won by you vs Otto since the page loaded.
+
+### Pacing (the player always gets a fair chance)
+- Otto waits 400ms after the player's move, then "thinks" for 1.2–1.8 seconds (random) before every move: its eyes look around, three dots hop in its bubble, and the turn indicator says `> OTTO IS THINKING...`. On the player's turn it says `> YOUR TURN_`.
+- Otto has a **Frustration meter** (0–100), shown as `OTTO'S PATIENCE` (100 − frustration). It rises as the game drags on, when the player blocks Otto, catches or counters a cheat, or vetoes a rule. Higher frustration = more frequent and nastier cheats.
+- Otto can cheat **at most once per turn**. Each cheat has a **cooldown** (a few turns). It never cheats before the first rule change.
+- **Telegraph every cheat:** ~1 second before a cheat, Otto's screen flickers `>:)` and it says "hehe…" in its bubble. If the player clicks Otto (or presses C) during this window they **Catch** the cheat: it's blocked, they get bonus points, and a small `CAUGHT!` pixel window pops up with a stamp effect.
+
+### Rules (Otto keeps rewriting them)
+Rules come in 3 categories, shown as 3 fixed rows in `RULES.TXT`. Only **one rule per category** is active at a time:
+| Category | Default | Other rules |
+|---|---|---|
+| **WIN** (how to win) | 3 in a row | 4 in a row → 5 in a row (one step at a time, never jumping by 2); "Diagonals don't count"; "Only diagonals count" (both keep the current length) |
+| **PLACE** (where you can play) | Place anywhere | "Gravity" (marks fall to the bottom of their column); "Corners are lava" (corners can't be used); "Must touch" (new marks must touch an existing mark, diagonals included) |
+| **TWIST** (a temporary effect) | None | "Fading ink" (marks older than 6 turns disappear); "Mirror" (every move is copied left ↔ right if that square is empty); "10-second timer" (the player loses the turn if time runs out; a pixel ring empties); "Reverse day" (making a line LOSES; lasts 3 turns, shown as pips) |
+
+- The board is always at least (win length + 1) squares wide and tall; it grows automatically when needed.
+- **When:** the first change comes after the player's 5th turn, then every 6 turns, and never more than one change per 5 player turns. `RULES.TXT` shows a countdown ("NEW RULE IN 3 TURNS"), and Otto warns one turn before (*"I've been reading the rules... I don't like them."*).
+- **Only at the start of the player's turn**, after Otto has moved, so the player always makes the first move under every new rule.
+- **How Otto picks:** it draws 3 random rules and keeps the one that helps it most (it tries each on a copy of the board).
+- **Never sudden:** while a rule changes, inputs are locked. The board dims and a `NEW_RULE.EXE` window pops up (2 copies stacking behind it) with the rule's icon, a short title (max 4 words), a one-line explanation, a tiny diagram and the old rule crossed out. `[ OK ]` continues, or it continues by itself after 4 seconds. The window then minimises into its row in `RULES.TXT`, which blinks twice; the affected squares are highlighted on the board for 2 seconds; then it's the player's turn.
+- **Never an instant win:** a line only counts if at least one of its marks was placed after the last rule change, so a new rule (or a Veto) can't turn a line that's already on the board into a win.
+- **Grace turn:** Otto's first move after a rule change can't win, and it can't cheat on that turn.
+- Rule history sits in a collapsed "HISTORY (n)" list in `RULES.TXT`.
+- Otto has a line for every rule ("5 in a row now. Good luck.", "Gravity's on. Everything falls. Like your chances.") and for being vetoed or amended.
 
 ### Otto's cheats (each has a counter)
 | Cheat | What happens | Countered by |
@@ -46,6 +75,7 @@ src/
 | **Mark Steal** | Otto repaints one of the player's X marks into an O | **Glue Stick** (undo the steal, and that mark is protected forever) |
 | **Double Move** | Otto places two O marks in one turn | **Time Out** (Otto skips its next turn) |
 | **Board Spin** | The board rotates 90° | **Paperweight** (undo the spin, and blocks spins for 3 turns) |
+| **Rewrite the Rules** | When frustrated, Otto brings the next rule change forward to the start of the player's next turn (never sooner than 5 turns after the last change) | **Veto** (cross out the new rule) |
 
 Lights Out lasts until countered or 3 player turns pass. It must be a smooth fade — no flashing.
 
@@ -60,6 +90,10 @@ Lights Out lasts until countered or 3 player turns pass. It must be a smooth fad
 | Time Out | 5 | Otto skips its next turn |
 | **My Own Line** | 5 | The player draws their own extra row or column and places a free X in it |
 | **Double Mark** | 6 | The player places two X marks this turn |
+| **Veto** | 5 | Cross out the newest rule and bring back the one it replaced |
+| **Amendment** | 6 | At the next rule change, the player picks the new rule from 3 cards instead of Otto |
+
+Keyboard shortcuts: 1–9 and 0 for the 10 power-ups.
 
 Power-ups are pixel floppy disks in the `TOOLBOX.EXE` window on the left, each with its name on the label and its cost as a pixel number. Unaffordable or currently useless power-ups are greyed out.
 
@@ -69,12 +103,13 @@ Power-ups are pixel floppy disks in the `TOOLBOX.EXE` window on the left, each w
 - +3 for blocking a row where Otto had two in a row
 - +2 for countering a cheat within 2 turns of it happening
 - +4 for catching a cheat during its telegraph window
-- +5 for winning a round
+- +5 for winning the match
+- +3 extra for winning or blocking within 2 turns of a rule change
 
 Show point gains as small "+3" pixel pops that float up and fade.
 
 ### Win detection
-Must work on **any grid size** (the grid can grow via Extra Line and My Own Line). A win is **3 in a row** horizontally, vertically or diagonally anywhere on the grid. Squares covered by minions can't be clicked and don't count toward anyone's line. Minimax only needs to handle the standard 3×3 grid; on a larger grid, Otto uses a simple heuristic: win if possible → block if needed → take the best open square.
+Must work on **any grid size** (up to 9×9) and for the **current** win rule: any line length (3–5) and only the allowed directions (all, across/down only, or diagonals only). Squares covered by minions can't be clicked and don't count toward anyone's line. A line only counts if it includes a mark placed since the last rule change. On Reverse day, whoever makes a line loses. Minimax is only used for the classic 3×3 game with the default rules; everywhere else Otto uses a heuristic that follows the current rules: win if possible → block if needed → extend its longest open line.
 
 ### Ending
 - **Player wins the match:** Otto has a meltdown (*"It's SOLVED. It was always solved. Why do I even—"*), its monitor shows a pixel "crash" screen, the table flips (the big CRT monitor flies off the desk), and a full-screen `YOU WIN!` pixel banner appears with pixel confetti.
@@ -82,12 +117,12 @@ Must work on **any grid size** (the grid can grow via Extra Line and My Own Line
 - Either way, show a **Play Again** button.
 
 ### Otto's personality
-Smug, petty, theatrical and funny — never cruel. Speaks in yellow pixel speech bubbles (at most 2 lines). Write at least 5 lines per situation in `dialogue.js`: match start, getting bored, telegraphing a cheat, cheat succeeds, cheat countered, cheat caught, player blocks it, round won, round lost, draw, rising frustration, meltdown. All dialogue is scripted (no API calls) so it works offline and is reliable for demos.
+Smug, petty, theatrical and funny — never cruel. Speaks in yellow pixel speech bubbles (at most 2 lines). Write at least 5 lines per situation in `dialogue.js`: match start, getting bored, telegraphing a cheat, cheat succeeds, cheat countered, cheat caught, player blocks it, Otto wins, draw, rising frustration, meltdown, rule warning, each new rule, vetoed, amended, Reverse day ending, out of room, final rule. All dialogue is scripted (no API calls) so it works offline and is reliable for demos.
 
 ## Screens
 1. **Title screen:** a `LOGIN.EXE` window with "AGENTS GONE WRONG" in Press Start 2P (lime with a pink pixel shadow), Otto's pixel CRT, a name input, a chunky `PLAY` button, and the one-line premise: *"Tic-tac-toe is solved. The agent didn't like that."*
 2. **Game screen:**
-   - Top HUD: round score (You vs Otto), points counter, Otto's Frustration meter
+   - Top bar: the title, the session score (You vs Otto), a Snowflake status floppy disk and a mute button
    - Left: `TOOLBOX.EXE` (points and the power-up floppy disks)
    - Centre: the turn indicator, then the board inside a big pixel CRT monitor (win banner on its screen), then one message line
    - Right: Otto on a small pixel CRT with its speech bubble and patience bar, then `RULES.TXT`
@@ -131,7 +166,7 @@ Smug, petty, theatrical and funny — never cruel. Speaks in yellow pixel speech
 
 ## Build in milestones
 After each milestone, make sure `npm run dev` runs without errors and summarise what changed before moving on.
-1. **Playable core:** 3×3 board, player vs Otto (minimax), win/draw detection, rounds and match score. Plain styling is fine.
+1. **Playable core:** 3×3 board, player vs Otto (minimax), win/draw detection and match flow. Plain styling is fine.
 2. **Cheats:** cheat system with telegraph, catch, cooldowns and the Frustration meter; implement all 6 cheats.
 3. **Power-ups & points:** scoring, the toolbox, all 8 power-ups, and win detection on a grown grid.
 4. **Art pass:** apply the retro pixel-art direction to every element, including Otto's expressions, speech bubbles, OS windows and pop-ups.
