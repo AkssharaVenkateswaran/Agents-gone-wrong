@@ -8,9 +8,17 @@ import { CHEATS, MAX_GRID_SIZE } from '../cheats.js';
 import { POWERUPS, canAfford } from '../powerups.js';
 import { ottoMood } from '../agent.js';
 import { setLights, pointTorchAt } from './effects.js';
+import {
+  installStickerDefs,
+  stickerX,
+  stickerO,
+  stickerOtto,
+  stickerMinion,
+  POWERUP_ICONS,
+  wobblyLine,
+  scribbleBox,
+} from './stickers.js';
 
-// Placeholder faces until the sticker art pass (Milestone 4).
-const OTTO_FACES = { smug: '😏', bored: '😑', scheming: '😈', furious: '😡' };
 // Round 1 (1952 look): Otto is a few characters on a monochrome screen.
 const OTTO_FACES_1952 = { smug: '[¬‿¬]', bored: '[-_-]', scheming: '[>‿<]', furious: '[ò_ó]' };
 
@@ -38,6 +46,7 @@ let focusIndex = 4; // which square has keyboard focus (start in the centre)
 export function initRender(rootElement, callbacks) {
   root = rootElement;
   handlers = callbacks;
+  installStickerDefs(); // the white die-cut border filter used by every sticker
 
   // One click listener for everything (event delegation).
   root.addEventListener('click', (e) => {
@@ -111,16 +120,22 @@ function render() {
   document.body.classList.toggle('era-1952', retro);
 
   root.innerHTML = `
-    <header class="hud">
-      <div class="hud-item">Round <strong>${state.round}</strong></div>
-      <div class="hud-item score">
-        You <strong>${state.score.player}</strong> – <strong>${state.score.otto}</strong> Otto
+    <header class="hud card">
+      <div class="hud-item">
+        <span class="washi washi-blue">Round</span>
+        <strong class="hud-value">${state.round}</strong>
+      </div>
+      <div class="hud-item score" aria-label="Score: you ${state.score.player}, Otto ${state.score.otto}">
+        <span class="score-you">You ${state.score.player}</span>
+        <span aria-hidden="true">–</span>
+        <span class="score-otto">${state.score.otto} Otto</span>
       </div>
       <div class="hud-item points" id="points" aria-live="polite">
-        Points <strong>${state.points}</strong>
+        <span class="washi washi-yellow">Points</span>
+        <strong class="hud-value">${state.points}</strong>
       </div>
       <div class="hud-item frustration">
-        <span id="frustration-label">Frustration</span>
+        <span class="washi washi-pink" id="frustration-label">Frustration</span>
         <div class="meter" role="progressbar" aria-labelledby="frustration-label"
              aria-valuemin="0" aria-valuemax="100" aria-valuenow="${state.frustration}">
           <div class="meter-fill" style="width: ${state.frustration}%"></div>
@@ -132,7 +147,10 @@ function render() {
       <section class="otto-area">
         <button id="otto" class="otto ${state.telegraph ? 'telegraph' : ''}"
                 aria-label="Otto (${mood}). Click or press C while Otto is scheming to catch a cheat.">
-          <span class="otto-face" aria-hidden="true">${(retro ? OTTO_FACES_1952 : OTTO_FACES)[mood]}</span>
+          ${retro
+            ? `<span class="otto-face" aria-hidden="true">${OTTO_FACES_1952[mood]}</span>`
+            : stickerOtto(mood)}
+          <span class="washi washi-green otto-name" aria-hidden="true">Otto</span>
         </button>
         <div class="bubble" role="status" aria-live="polite">${state.ottoSays}</div>
       </section>
@@ -143,7 +161,7 @@ function render() {
       </div>
 
       <p class="status">${statusText()}</p>
-      ${state.notice ? `<p class="notice" role="status">${state.notice}</p>` : ''}
+      ${state.notice ? `<p class="notice card" role="status">${state.notice}</p>` : ''}
       ${renderButtons()}
     </main>
 
@@ -156,16 +174,22 @@ function render() {
   if (boardHadFocus) focusCell();
 }
 
+// What was on the board last time we drew it — so only NEW stickers get the
+// "peel and place" animation (not every sticker on every redraw).
+let previousBoard = null;
+
+function isNewSticker(i, kind) {
+  const prev = previousBoard;
+  if (!prev || prev.rows !== state.board.rows || prev.cols !== state.board.cols) return false;
+  if (kind === 'minion') return !prev.minions[i];
+  return prev.cells[i] !== kind;
+}
+
 function renderBoard() {
-  const { rows, cols, cells, minions, stolen } = state.board;
+  const { rows, cols, cells, minions, stolen, glued } = state.board;
   const locked = state.turn !== 'X' || state.roundOver;
   const targetCells = state.mode?.type === 'ownLinePlace' ? state.mode.cells : null;
-
-  // Which squares belong to a line Otto (or later, the player) added?
-  const lineOwner = {};
-  for (const line of state.addedLines) {
-    for (const i of lineCells(state.board, line.type, line.index)) lineOwner[i] = line.owner;
-  }
+  const retro = state.era === '1952';
 
   const squares = cells
     .map((mark, i) => {
@@ -176,21 +200,28 @@ function renderBoard() {
       if (c === cols) classes.push('edge-right');  // used to draw the 1952 dotted grid
       if (r === rows) classes.push('edge-bottom');
       if (state.winLine?.includes(i)) classes.push('win');
-      if (lineOwner[i]) classes.push('line-' + lineOwner[i]);
-      if (stolen[i]) classes.push('stolen');
-      if (state.board.glued[i]) classes.push('glued');
       if (targetCells?.includes(i) && !mark) classes.push('target');
       if (state.mode?.type === 'flick' && minions[i]) classes.push('target');
 
       let label = mark ? mark : 'empty';
-      let content = mark ?? '';
-      if (mark && state.era === '1952') content = dotMatrix(mark);
+      let content = '';
+      if (mark) {
+        content = retro ? dotMatrix(mark) : mark === 'X' ? stickerX() : stickerO();
+        if (isNewSticker(i, mark)) classes.push('just-placed');
+      }
       if (minions[i]) {
         label = 'blocked by a minion (click to flick it off for 2 points)';
-        content = '<span class="minion" aria-hidden="true">•‿•</span>';
+        content = stickerMinion();
+        if (isNewSticker(i, 'minion')) classes.push('just-placed');
       }
-      if (stolen[i]) label += ' (stolen from you)';
-      if (state.board.glued[i]) label += ' (glued, can\'t be stolen)';
+      if (stolen[i]) {
+        label += ' (stolen from you)';
+        content += '<span class="badge badge-stolen" aria-hidden="true">repainted!</span>';
+      }
+      if (glued[i]) {
+        label += ' (glued, can\'t be stolen)';
+        content += '<span class="badge badge-glued" aria-hidden="true">glued</span>';
+      }
 
       return `
         <button class="${classes.join(' ')}"
@@ -203,14 +234,49 @@ function renderBoard() {
     })
     .join('');
 
+  previousBoard = { rows, cols, cells: cells.slice(), minions: minions.slice() };
+
   return `
     <div class="board" role="grid" aria-label="Tic-tac-toe board, ${rows} by ${cols}"
          style="grid-template-columns: repeat(${cols}, 1fr);
                 grid-template-rows: repeat(${rows}, 1fr);
                 aspect-ratio: ${cols} / ${rows};
                 width: min(100%, ${cols * 110}px);">
+      ${retro ? '' : renderGridLines()}
       ${squares}
     </div>`;
+}
+
+// The hand-drawn grid: slightly wobbly ink strokes between the squares, plus a
+// scribbly coral loop around lines Otto added and a neat teal box around the
+// player's own lines. Drawn in an SVG behind the squares (100 units per square).
+function renderGridLines() {
+  const { rows, cols } = state.board;
+  const w = cols * 100;
+  const h = rows * 100;
+  let paths = '';
+
+  for (let c = 1; c < cols; c++) {
+    paths += `<path class="grid-ink" d="${wobblyLine(c * 100, 8, c * 100, h - 8, c * 7 + cols)}" />`;
+  }
+  for (let r = 1; r < rows; r++) {
+    paths += `<path class="grid-ink" d="${wobblyLine(8, r * 100, w - 8, r * 100, r * 13 + rows)}" />`;
+  }
+
+  state.addedLines.forEach((line, n) => {
+    const isRow = line.type === 'row';
+    const x = isRow ? 6 : line.index * 100 + 6;
+    const y = isRow ? line.index * 100 + 6 : 6;
+    const bw = isRow ? w - 12 : 88;
+    const bh = isRow ? 88 : h - 12;
+    if (line.owner === 'O') {
+      paths += `<path class="grid-otto" d="${scribbleBox(x, y, bw, bh, n + 1)}" />`;
+    } else {
+      paths += `<rect class="grid-player" x="${x}" y="${y}" width="${bw}" height="${bh}" rx="14" />`;
+    }
+  });
+
+  return `<svg class="grid-lines" viewBox="0 0 ${w} ${h}" aria-hidden="true">${paths}</svg>`;
 }
 
 function statusText() {
@@ -292,6 +358,7 @@ function renderTray() {
               title="${p.help} (key ${p.key})"
               ${faded ? 'aria-disabled="true"' : ''}>
         <span class="powerup-key" aria-hidden="true">${p.key}</span>
+        <span class="powerup-icon" aria-hidden="true">${POWERUP_ICONS[p.id]()}</span>
         <span class="powerup-name">${p.name}</span>
         <span class="powerup-cost" aria-hidden="true">${p.cost}</span>
       </button>`;
@@ -313,6 +380,7 @@ function renderTray() {
 
   return `
     <nav class="tray" aria-label="Power-ups">
+      <span class="washi washi-green tray-label" aria-hidden="true">Power-ups</span>
       ${choice}
       <div class="tray-buttons">${buttons}</div>
     </nav>`;
