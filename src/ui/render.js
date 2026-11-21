@@ -11,6 +11,25 @@ import { setLights, pointTorchAt } from './effects.js';
 
 // Placeholder faces until the sticker art pass (Milestone 4).
 const OTTO_FACES = { smug: '😏', bored: '😑', scheming: '😈', furious: '😡' };
+// Round 1 (1952 look): Otto is a few characters on a monochrome screen.
+const OTTO_FACES_1952 = { smug: '[¬‿¬]', bored: '[-_-]', scheming: '[>‿<]', furious: '[ò_ó]' };
+
+// 1952 look: X and O are drawn as low-resolution 7x7 dot patterns, like the
+// lit dots on the EDSAC computer's little CRT screen ('#' = a lit dot).
+const DOT_PATTERNS = {
+  X: ['#.....#', '.#...#.', '..#.#..', '...#...', '..#.#..', '.#...#.', '#.....#'],
+  O: ['..###..', '.#...#.', '#.....#', '#.....#', '#.....#', '.#...#.', '..###..'],
+};
+
+function dotMatrix(mark) {
+  let dots = '';
+  DOT_PATTERNS[mark].forEach((row, r) => {
+    [...row].forEach((ch, c) => {
+      if (ch === '#') dots += `<circle cx="${c + 0.5}" cy="${r + 0.5}" r="0.3" />`;
+    });
+  });
+  return `<svg class="dots" viewBox="0 0 7 7" aria-hidden="true">${dots}</svg>`;
+}
 
 let root;
 let handlers;
@@ -88,6 +107,8 @@ function render() {
   const boardHadFocus = !!document.activeElement?.closest?.('[data-cell]');
 
   const mood = ottoMood(state);
+  const retro = state.era === '1952';
+  document.body.classList.toggle('era-1952', retro);
 
   root.innerHTML = `
     <header class="hud">
@@ -111,12 +132,15 @@ function render() {
       <section class="otto-area">
         <button id="otto" class="otto ${state.telegraph ? 'telegraph' : ''}"
                 aria-label="Otto (${mood}). Click or press C while Otto is scheming to catch a cheat.">
-          <span class="otto-face" aria-hidden="true">${OTTO_FACES[mood]}</span>
+          <span class="otto-face" aria-hidden="true">${(retro ? OTTO_FACES_1952 : OTTO_FACES)[mood]}</span>
         </button>
         <div class="bubble" role="status" aria-live="polite">${state.ottoSays}</div>
       </section>
 
-      ${renderBoard()}
+      <div class="screen">
+        ${renderBoard()}
+        ${retro ? '<p class="era-label">OXO · EDSAC · 1952</p>' : ''}
+      </div>
 
       <p class="status">${statusText()}</p>
       ${state.notice ? `<p class="notice" role="status">${state.notice}</p>` : ''}
@@ -149,6 +173,8 @@ function renderBoard() {
       const c = (i % cols) + 1;
       const classes = ['cell'];
       if (mark) classes.push('mark-' + mark);
+      if (c === cols) classes.push('edge-right');  // used to draw the 1952 dotted grid
+      if (r === rows) classes.push('edge-bottom');
       if (state.winLine?.includes(i)) classes.push('win');
       if (lineOwner[i]) classes.push('line-' + lineOwner[i]);
       if (stolen[i]) classes.push('stolen');
@@ -158,6 +184,7 @@ function renderBoard() {
 
       let label = mark ? mark : 'empty';
       let content = mark ?? '';
+      if (mark && state.era === '1952') content = dotMatrix(mark);
       if (minions[i]) {
         label = 'blocked by a minion (click to flick it off for 2 points)';
         content = '<span class="minion" aria-hidden="true">•‿•</span>';
@@ -204,6 +231,7 @@ function statusText() {
 }
 
 function renderButtons() {
+  if (state.transitioning) return '';
   if (state.matchOver) return `<button id="play-again" class="btn">Play Again</button>`;
   if (state.roundOver) return `<button id="next-round" class="btn">Next Round</button>`;
   return '';

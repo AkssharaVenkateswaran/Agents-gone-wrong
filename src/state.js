@@ -9,6 +9,8 @@ export const ROUNDS_TO_WIN = 3; // a match is first to 3 round wins
 
 export const state = {
   screen: 'game',          // 'game' for now (title/end screens come in Milestone 5)
+  era: '1952',             // '1952' = round 1 looks like OXO on the EDSAC; 'modern' = sticker scrapbook
+  transitioning: false,    // true while the 1952 screen glitches and peels away (input is blocked)
   board: createBoard(3, 3),
   round: 1,                // which round we are on (1, 2, 3, ...)
   score: { player: 0, otto: 0 },
@@ -53,6 +55,8 @@ export function resetMatch() {
   state.round = 1;
   state.score = { player: 0, otto: 0 };
   state.matchOver = false;
+  state.era = '1952';      // every match starts in 1952
+  state.transitioning = false;
   state.turnNumber = 0;
   state.frustration = 0;
   state.cooldowns = {};

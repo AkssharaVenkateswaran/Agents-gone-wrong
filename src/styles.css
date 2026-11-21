@@ -21,7 +21,7 @@ body {
   font-family: 'Nunito', system-ui, sans-serif;
 }
 
-#app {
+.app {
   max-width: 520px;
   margin: 0 auto;
   padding: 16px;
@@ -325,3 +325,137 @@ body {
   cursor: pointer;
 }
 .btn:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+
+/* ==========================================================================
+   1952 look (round 1): tic-tac-toe as it looked on the EDSAC computer's CRT —
+   a dark screen, pale phosphor dots, dotted grid lines, monospace text.
+   Applied by the `era-1952` class on <body> (and on the peel sheet copy).
+   ========================================================================== */
+:root {
+  --crt-bg: #0b0f0c;
+  --phosphor: #c9f5c4;
+  --phosphor-dim: #7fae80;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+}
+
+body.era-1952 { background: var(--crt-bg); color: var(--phosphor); }
+
+.era-1952 :is(.hud, .bubble, .btn, .powerup, .debug, .debug-btn) {
+  background: transparent;
+  color: var(--phosphor);
+  border-color: var(--phosphor-dim);
+  box-shadow: none;
+}
+.era-1952 :is(.hud, .score, .bubble, .status, .notice, .btn, .powerup, .powerup-name,
+  .powerup-cost, .powerup-key, .points strong, .otto-face, .debug, .debug-btn) {
+  font-family: var(--mono);
+}
+.era-1952 :is(.score, .points strong) { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.era-1952 .bubble::before { content: '> '; }
+.era-1952 .otto-face { font-size: 1.4rem; white-space: nowrap; }
+.era-1952 .meter { background: transparent; border-color: var(--phosphor-dim); }
+.era-1952 .meter-fill { background: var(--phosphor); }
+.era-1952 .tray { background: var(--crt-bg); }
+.era-1952 .powerup:nth-child(n) { background: transparent; }
+.era-1952 .powerup-cost { background: transparent; border-color: var(--phosphor-dim); }
+.era-1952 .powerup.faded::after { background: var(--crt-bg); border-color: var(--phosphor-dim); }
+.era-1952 :is(.otto, .btn, .powerup, .cell):focus-visible { outline: 3px dashed var(--phosphor); }
+
+/* The small round-cornered CRT screen around the board. */
+.screen { display: contents; } /* modern look: no frame */
+.era-1952 .screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 380px);
+  padding: 18px 18px 10px;
+  border: 2px solid var(--phosphor-dim);
+  border-radius: 22px;
+}
+/* Faint, static scanlines (they never move or flicker). */
+.era-1952 .screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(201, 245, 196, 0.05) 0 1px, transparent 1px 4px);
+}
+.era-label {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  color: var(--phosphor-dim);
+}
+
+/* Board: no tiles, just dotted grid lines between squares. */
+.era-1952 .board { background: transparent; padding: 0; gap: 0; border-radius: 0; }
+.era-1952 .cell {
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--phosphor);
+  border-radius: 0;
+  border: 0 dotted var(--phosphor-dim);
+  border-right-width: 4px;
+  border-bottom-width: 4px;
+}
+.era-1952 .cell.edge-right { border-right-width: 0; }
+.era-1952 .cell.edge-bottom { border-bottom-width: 0; }
+.era-1952 .cell.win { background: rgba(201, 245, 196, 0.12); }
+.era-1952 .cell.target { background: rgba(201, 245, 196, 0.08); box-shadow: none; }
+.dots { width: 62%; height: 62%; fill: currentColor; filter: drop-shadow(0 0 2px rgba(201, 245, 196, 0.55)); }
+
+/* --- The peel transition --------------------------------------------------- */
+.peel-sheet { position: fixed; inset: 0; z-index: 30; color: var(--phosphor); } /* also blocks clicks while it plays */
+.peel-screen { position: fixed; inset: 0; overflow: hidden; background: var(--crt-bg); }
+
+/* Glitch: the screen jolts sideways and two thin strips slide out of line.
+   Only position changes — brightness stays the same, so nothing flashes. */
+.glitch-band { display: none; }
+.peel-sheet.glitching .glitch-band { display: block; }
+/* (the jolt moves the page copy, not the dark screen behind it, so no edges show) */
+.peel-sheet.glitching .peel-screen:not(.glitch-band) > * { animation: crt-jolt 0.9s ease-in-out; }
+.glitch-band-1 { animation: band-1 0.9s ease-in-out forwards; }
+.glitch-band-2 { animation: band-2 0.9s ease-in-out forwards; }
+@keyframes crt-jolt {
+  0%, 100% { transform: none; }
+  30% { transform: translateX(-4px) skewX(-1deg); }
+  65% { transform: translateX(3px) skewX(0.8deg); }
+}
+@keyframes band-1 {
+  0%   { clip-path: inset(18% 0 76% 0); transform: translateX(0); }
+  35%  { clip-path: inset(24% 0 68% 0); transform: translateX(-22px); }
+  70%  { clip-path: inset(46% 0 46% 0); transform: translateX(14px); }
+  100% { clip-path: inset(62% 0 32% 0); transform: translateX(0); }
+}
+@keyframes band-2 {
+  0%   { clip-path: inset(70% 0 24% 0); transform: translateX(0); }
+  40%  { clip-path: inset(60% 0 30% 0); transform: translateX(18px); }
+  75%  { clip-path: inset(34% 0 60% 0); transform: translateX(-12px); }
+  100% { clip-path: inset(12% 0 82% 0); transform: translateX(0); }
+}
+
+/* The sticker's white back, folding over as it peels. */
+.peel-flap-shadow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  filter: drop-shadow(-4px 6px 6px rgba(31, 29, 43, 0.35));
+}
+.peel-flap {
+  position: absolute;
+  inset: 0;
+  background: #f3eee1;
+  clip-path: polygon(0 0, 0 0, 0 0);
+}
+
+/* Reduced motion: no glitch or peel, the old screen just fades away. */
+.peel-sheet.fading { opacity: 0; transition: opacity 0.8s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .peel-sheet.glitching .glitch-band { display: none; }
+  .peel-sheet.glitching .peel-screen > * { animation: none; }
+}

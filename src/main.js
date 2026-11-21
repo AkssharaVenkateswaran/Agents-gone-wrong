@@ -19,10 +19,11 @@ import { getPowerUp, canAfford } from './powerups.js';
 import { addPoints, POINTS, QUICK_COUNTER_TURNS } from './scoring.js';
 import { say } from './dialogue.js';
 import { initRender } from './ui/render.js';
-import { showStamp, spinBoardEffect, popPoints } from './ui/effects.js';
+import { showStamp, spinBoardEffect, popPoints, createPeelSheet } from './ui/effects.js';
 
 const OTTO_THINK_MS = 600;  // small pause so Otto's move doesn't feel instant
 const TELEGRAPH_MS = 1100;  // how long the player has to catch a cheat
+const SOLVED_PAUSE_MS = 2200; // time to read "this game is SOLVED" before the 1952 screen peels
 
 // --- Timers ----------------------------------------------------------------
 // `later` is setTimeout, but if the round/match was reset in the meantime the
@@ -38,7 +39,7 @@ function later(ms, fn) {
 // --- Player's turn -----------------------------------------------------------
 
 function isPlayersTurn() {
-  return state.turn === 'X' && !state.roundOver && !state.matchOver;
+  return state.turn === 'X' && !state.roundOver && !state.matchOver && !state.transitioning;
 }
 
 // Give the player points and show a "+N" pop.
@@ -375,17 +376,42 @@ function checkRoundEnd() {
 
 function startRound(roundNumber) {
   generation++; // cancel any of Otto's pending timers
-  const wasRoundOne = state.round === 1 && roundNumber === 2;
+  if (state.era === '1952') {
+    leave1952(roundNumber);
+    return;
+  }
   state.round = roundNumber;
   resetRound();
-  if (wasRoundOne) {
-    // Otto realises tic-tac-toe is solved and decides to start cheating.
-    addFrustration(state, Math.max(0, 20 - state.frustration));
-    state.ottoSays = say('solved');
-  } else {
-    state.ottoSays = say('matchStart');
-  }
+  state.ottoSays = say('matchStart');
   emit('change');
+}
+
+// After round 1: Otto realises tic-tac-toe is solved, and the old 1952 screen
+// glitches and peels away like a sticker, revealing the sticker-scrapbook world.
+function leave1952(roundNumber) {
+  state.transitioning = true;
+  state.ottoSays = say('solved');
+  emit('change'); // Otto says it on the old screen first
+
+  later(SOLVED_PAUSE_MS, () => {
+    // 1. Take a copy of the old screen and lay it over the page...
+    const sheet = createPeelSheet(document.getElementById('app'));
+
+    // 2. ...switch the real page to the new world underneath it...
+    state.era = 'modern';
+    state.round = roundNumber;
+    resetRound();
+    addFrustration(state, Math.max(0, 20 - state.frustration)); // Otto starts out bored
+    emit('change');
+
+    // 3. ...then glitch and peel the copy away.
+    const myGeneration = generation;
+    sheet.play().then(() => {
+      if (myGeneration !== generation) return; // a new match started meanwhile
+      state.transitioning = false;
+      emit('change');
+    });
+  });
 }
 
 function playAgain() {
@@ -397,6 +423,7 @@ function playAgain() {
 
 // --- Debug panel (open the game with ?debug in the URL) -----------------------
 function debugAction(action, value) {
+  if (state.transitioning) return;
   state.debug.message = '';
   if (action === 'force') {
     state.debug.forceCheat = value;
