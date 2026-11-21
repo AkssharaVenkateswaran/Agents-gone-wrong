@@ -167,6 +167,68 @@ export const ruleLines = {
   reverse: ["Reverse day! Making a line LOSES. Bet you didn't see that coming.", "Opposite day! Lines are bad now. For 3 turns."],
 };
 
+// --- Lines that use Otto's memory (real stats from Snowflake) ---
+// {placeholders} are filled in with real numbers. If there are no stats
+// (the API is offline), Otto just uses its normal scripted lines instead.
+export const memoryLines = {
+  firstMove: [
+    "You've opened in the {firstMove} {firstMoveCount} times. Predictable.",
+    "Let me guess: {firstMove}? You've done it {firstMoveCount} times.",
+  ],
+  ottoWinsToday: [
+    "I've beaten {ottoWinsToday} {humans} today. You'll be next.",
+    "{ottoWinsToday} {humans} defeated today. I'm keeping count.",
+  ],
+  record: [
+    "{wins} wins in {matches} matches against me. Cute.",  // (only used from 2 matches)
+    "You've played me {matches} times. I remember every one.",
+  ],
+  catchRate: [
+    "Only {catchRate}% of humans catch my {cheatName}. Let's see.",
+    "hehe… {catchRate}% of humans spot my {cheatName}. Are you one of them?",
+  ],
+};
+
+// Swap each {name} for values.name.
+export function fillLine(template, values) {
+  return template.replace(/\{(\w+)\}/g, (_, key) => String(values[key]));
+}
+
+function pick(list) {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+// A match-start taunt using real stats, or null if there's nothing worth saying.
+export function sayFromMemory(stats) {
+  if (!stats) return null;
+  const options = [];
+  const player = stats.player;
+  if (player?.firstMove && player.firstMove.count >= 2) {
+    options.push(fillLine(pick(memoryLines.firstMove), {
+      firstMove: player.firstMove.move,
+      firstMoveCount: player.firstMove.count,
+    }));
+  }
+  if (stats.global.ottoWinsToday >= 1) {
+    const today = stats.global.ottoWinsToday;
+    options.push(fillLine(pick(memoryLines.ottoWinsToday), {
+      ottoWinsToday: today,
+      humans: today === 1 ? 'human' : 'humans',
+    }));
+  }
+  if (player && player.matches >= 2) {
+    options.push(fillLine(pick(memoryLines.record), player));
+  }
+  return options.length > 0 ? pick(options) : null;
+}
+
+// A telegraph taunt about how often a cheat gets caught, or null.
+export function sayCatchRate(stats, cheatId, cheatName) {
+  const rate = stats?.global.catchRates[cheatId];
+  if (!rate || rate.attempts < 3) return null; // not enough data to brag about
+  return fillLine(pick(memoryLines.catchRate), { catchRate: rate.rate, cheatName });
+}
+
 export function sayRule(ruleId) {
   const options = ruleLines[ruleId] || ['New rule!'];
   return options[Math.floor(Math.random() * options.length)];

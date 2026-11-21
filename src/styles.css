@@ -632,7 +632,81 @@ body {
 .era-1952 .rulebook::before { display: none; }
 .era-1952 .rulebook-title { background: var(--crt-bg); padding: 0 6px; }
 .era-1952 :is(.rule-icon, .new-tag) { display: none; }
+.era-1952 .memory-tag { background: var(--crt-bg); padding: 0 6px; }
 .era-1952 .rule-text strong { font-family: var(--mono); font-weight: 700; }
+
+/* ==========================================================================
+   Title screen, Otto's memory label and the Humans vs Otto leaderboard
+   ========================================================================== */
+.title-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 48px 0 32px;
+  text-align: center;
+}
+.title { margin: 0; }
+.title .washi { font-size: clamp(2rem, 8vw, 3.4rem); padding: 6px 28px; }
+.title-otto { width: 150px; }
+.title-otto .sticker { width: 100%; transform-origin: 50% 90%; animation: idle-wobble 1.4s ease-in-out infinite alternate; }
+.premise { margin: 0; font-size: 1.15rem; font-weight: 700; }
+.name-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 360px);
+  padding: 18px 20px 20px;
+  transform: rotate(-1deg);
+}
+.name-form label { font-family: var(--marker); font-size: 1.05rem; }
+/* The name input looks like a blank sticker label. */
+.name-input {
+  width: 100%;
+  padding: 10px 14px;
+  font: 700 1.2rem 'Nunito', sans-serif;
+  text-align: center;
+  color: var(--ink);
+  background: #fff;
+  border: 2.5px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 0 0 0 4px #fff, 3px 5px 0 4px rgba(31, 29, 43, 0.18);
+}
+.name-input:focus-visible { outline: 3px solid var(--teal); outline-offset: 6px; }
+
+/* "🧠 Otto's memory powered by Snowflake" taped onto the top bar. */
+.hud { position: relative; }
+.memory-tag { position: absolute; top: -13px; right: 18px; font-size: 0.75rem; }
+
+.leaderboard {
+  position: relative;
+  width: min(100%, 380px);
+  padding: 26px 18px 14px;
+  transform: rotate(0.8deg);
+}
+.leaderboard-title { position: absolute; top: -12px; left: 16px; font-size: 1rem; }
+.versus { margin: 0 0 10px; text-align: center; font-family: var(--marker); font-size: 1.3rem; }
+.leaders { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.leaders li { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; align-items: center; }
+.leaders .rank {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--yellow);
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+.leaders .who { font-weight: 800; overflow-wrap: anywhere; }
+.leaders .is-you .who { color: var(--teal-text); }
+.memory-note { margin: 0; text-align: center; font-size: 0.92rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .title-otto .sticker { animation: none; }
+}
 
 /* ==========================================================================
    1952 look (round 1): tic-tac-toe as it looked on the EDSAC computer's CRT —

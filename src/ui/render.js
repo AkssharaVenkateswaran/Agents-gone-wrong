@@ -16,6 +16,7 @@ import {
   FADE_AFTER_TURNS,
 } from '../rules.js';
 import { setLights, pointTorchAt } from './effects.js';
+import { MAX_NAME_LENGTH } from '../matchLog.js';
 import {
   installStickerDefs,
   stickerX,
@@ -56,6 +57,13 @@ export function initRender(rootElement, callbacks) {
   root = rootElement;
   handlers = callbacks;
   installStickerDefs(); // the white die-cut border filter used by every sticker
+
+  // The title screen's name form.
+  root.addEventListener('submit', (e) => {
+    if (e.target.id !== 'name-form') return;
+    e.preventDefault();
+    handlers.onStart(e.target.elements.playerName.value);
+  });
 
   // One click listener for everything (event delegation).
   root.addEventListener('click', (e) => {
@@ -102,6 +110,8 @@ export function initRender(rootElement, callbacks) {
   //   Escape - cancel a power-up that is waiting for a click
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target.closest?.('input, textarea')) return; // typing a name, not playing
+    if (state.screen !== 'game') return;
     if (e.key === 'c' || e.key === 'C') handlers.onCatch();
     else if (e.key === 'Escape') handlers.onCancel();
     else {
@@ -126,6 +136,10 @@ export function updateTurnTimer(msLeft) {
 }
 
 function render() {
+  if (state.screen === 'title') {
+    renderTitle();
+    return;
+  }
   // The grid can change size, so keep the keyboard focus on the board.
   focusIndex = Math.min(focusIndex, state.board.cells.length - 1);
   // Remember if the player was using the board so we can put focus back.
@@ -138,6 +152,7 @@ function render() {
 
   root.innerHTML = `
     <header class="hud card">
+      <span class="washi washi-blue memory-tag">🧠 Otto's memory powered by Snowflake</span>
       <div class="hud-item">
         <span class="washi washi-blue">Turn</span>
         <strong class="hud-value">${Math.min(currentTurn(state), MAX_TURNS)}<small>/${MAX_TURNS}</small></strong>
@@ -180,6 +195,7 @@ function render() {
         <p class="status">${statusText()}</p>
         ${state.notice ? `<p class="notice card" role="status">${state.notice}</p>` : ''}
         ${state.matchOver ? `<button id="play-again" class="btn">Play Again</button>` : ''}
+        ${state.matchOver ? renderLeaderboard() : ''}
       </main>
 
       ${renderRuleBook()}
@@ -192,6 +208,60 @@ function render() {
 
   setLights(!state.lightsOut);
   if (boardHadFocus) focusCell();
+}
+
+// --- Title screen ------------------------------------------------------------------------
+function renderTitle() {
+  document.body.classList.remove('era-1952');
+  setLights(true);
+  root.innerHTML = `
+    <section class="title-screen">
+      <h1 class="title"><span class="washi washi-yellow">Agents Gone Wrong</span></h1>
+      <div class="title-otto">${stickerOtto('smug')}</div>
+      <p class="premise">Tic-tac-toe is solved. The agent didn't like that.</p>
+      <form id="name-form" class="name-form card">
+        <label for="player-name">What should Otto call you?</label>
+        <input id="player-name" name="playerName" class="name-input" type="text"
+               maxlength="${MAX_NAME_LENGTH}" autocomplete="nickname" spellcheck="false"
+               placeholder="Your name" value="${escapeHtml(state.playerName)}" />
+        <button class="btn" type="submit">Play</button>
+      </form>
+    </section>`;
+  root.querySelector('#player-name').focus();
+}
+
+// Names come from players, so never put them into HTML as-is.
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+}
+
+// --- Humans vs Otto leaderboard (from Snowflake) -------------------------------------------
+function renderLeaderboard() {
+  const { status, stats } = state.memory;
+  let body;
+  if (status === 'loading' && !stats) {
+    body = `<p class="memory-note">Asking Otto's memory…</p>`;
+  } else if (!stats) {
+    body = `<p class="memory-note">Otto's memory is offline right now. (The game works fine without it.)</p>`;
+  } else {
+    const { humanWins, ottoWins } = stats.global;
+    const rows = stats.leaderboard
+      .map((row, n) => `
+        <li class="${row.name === state.playerName ? 'is-you' : ''}">
+          <span class="rank">${n + 1}</span>
+          <span class="who">${escapeHtml(row.name)}</span>
+          <span class="wins">${row.wins} win${row.wins === 1 ? '' : 's'}</span>
+        </li>`)
+      .join('');
+    body = `
+      <p class="versus"><span class="score-you">Humans ${humanWins}</span> – <span class="score-otto">${ottoWins} Otto</span></p>
+      ${rows ? `<ol class="leaders">${rows}</ol>` : '<p class="memory-note">No human has beaten Otto yet. Be the first!</p>'}`;
+  }
+  return `
+    <section class="leaderboard card" aria-label="Humans vs Otto leaderboard">
+      <span class="washi washi-pink leaderboard-title">Humans vs Otto</span>
+      ${body}
+    </section>`;
 }
 
 // --- The board -------------------------------------------------------------------------

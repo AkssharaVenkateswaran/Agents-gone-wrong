@@ -37,7 +37,9 @@ import {
   currentTurn,
 } from './rules.js';
 import { ottoRewriteRules, findWinningSquare } from './ai.js';
-import { say, sayRule } from './dialogue.js';
+import { say, sayRule, sayFromMemory, sayCatchRate } from './dialogue.js';
+import { fetchStats, saveMatch } from './memory.js';
+import { FIRST_MOVES, cleanName } from './matchLog.js';
 import { initRender, updateTurnTimer } from './ui/render.js';
 import { showStamp, spinBoardEffect, popPoints, createPeelSheet } from './ui/effects.js';
 
@@ -132,6 +134,9 @@ function onCellClick(index) {
 function playerPlace(landing) {
   // Was Otto about to make a line here? (On Reverse day lines are bad, so no blocking.)
   const ottoThreat = isReverseDay(state) ? -1 : findWinningSquare(state, 'O');
+  if (!state.log.firstMove && state.board.rows === 3 && state.board.cols === 3) {
+    state.log.firstMove = FIRST_MOVES[landing]; // remembered by Otto's memory
+  }
   placeMove(state, landing, 'X');
   state.notice = '';
   earn(POINTS.placeX);
@@ -338,6 +343,7 @@ function modeOwner(mode) {
 function pay(powerUp) {
   state.points -= powerUp.cost;
   state.stats.powerUpsUsed++;
+  state.log.powerupsUsed.push(powerUp.id);
 }
 
 // Shared clean-up after a power-up: counter bonus, Otto's reaction, win check.
@@ -431,6 +437,9 @@ async function ottoTurn() {
     // Telegraph: Otto wobbles and says "hehe…". The player can click Otto now.
     state.telegraph = cheat.id;
     state.ottoSays = say(cheat.id === 'rewriteRules' ? 'ruleTelegraph' : 'telegraph');
+    // Sometimes Otto brags with a real stat: "Only 23% of humans catch my Mark Steal."
+    const brag = sayCatchRate(state.memory.stats, cheat.id, cheat.name);
+    if (brag && Math.random() < 0.4) state.ottoSays = brag;
     emit('change');
     if (!(await pause(TELEGRAPH_MS))) return;
 
@@ -460,6 +469,7 @@ function catchCheat() {
 
   state.cooldowns[cheat.id] = cheat.cooldown; // a caught cheat still goes on cooldown
   state.stats.cheatsCaught++;
+  state.log.cheatsCaught.push(cheat.id);
   addFrustration(state, 10);
   state.ottoSays = say('cheatCaught');
   state.notice = `CAUGHT! Otto was about to use ${cheat.name}.`;
@@ -475,6 +485,7 @@ function runCheat(cheat) {
   state.cheatLandedAt[cheat.id] = state.turnNumber;
   if (cheat.id === 'boardSpin') state.spinsToUndo++;
   state.stats.cheatsUsed++;
+  state.log.cheatsUsed.push(cheat.id);
 
   if (cheat.id === 'rewriteRules') {
     announceRuleChange(state.lastRuleChange);
@@ -575,6 +586,45 @@ function endMatch(winner, line) {
     state.notice = `Reverse day! Making a line LOSES, so ${winner === 'X' ? 'you win' : 'Otto wins'}.`;
   }
   emit('change');
+  rememberMatch(winner);
+}
+
+// --- Otto's memory (Snowflake, through our API) ---------------------------------------
+// None of this ever blocks the game: if the API is slow or down, the game carries on.
+
+// At the start of a match: load stats, then maybe taunt the player with them.
+async function loadMemory() {
+  const myGeneration = generation;
+  state.memory = { status: 'loading', stats: null };
+  const stats = await fetchStats(state.playerName);
+  if (myGeneration !== generation) return; // a new match started meanwhile
+  state.memory = { status: stats ? 'ready' : 'offline', stats };
+  const taunt = sayFromMemory(stats);
+  // Only interrupt if the player hasn't started playing yet.
+  if (taunt && state.playerTurns === 0 && !state.matchOver) state.ottoSays = taunt;
+  emit('change');
+}
+
+// At the end of a match: save it, then reload the stats for the leaderboard.
+async function rememberMatch(winner) {
+  if (state.log.saved) return; // only once per match
+  state.log.saved = true;
+  const myGeneration = generation;
+  state.memory = { ...state.memory, status: 'loading' };
+  emit('change');
+
+  await saveMatch({
+    playerName: state.playerName,
+    firstMove: state.log.firstMove,
+    cheatsUsed: state.log.cheatsUsed,
+    cheatsCaught: state.log.cheatsCaught,
+    powerupsUsed: state.log.powerupsUsed,
+    winner: winner === 'X' ? 'player' : winner === 'O' ? 'otto' : 'draw',
+  });
+  const stats = await fetchStats(state.playerName);
+  if (myGeneration !== generation) return;
+  state.memory = stats ? { status: 'ready', stats } : { ...state.memory, status: 'offline' };
+  emit('change');
 }
 
 // --- The 1952 opening -------------------------------------------------------------------
@@ -609,6 +659,28 @@ function playAgain() {
   resetMatch();
   state.ottoSays = say('matchStart');
   emit('change');
+  loadMemory(); // runs in the background
+}
+
+// The title screen's Play button.
+const NAME_KEY = 'agents-gone-wrong:name';
+function startGame(rawName) {
+  state.playerName = cleanName(rawName) || 'Human';
+  try {
+    localStorage.setItem(NAME_KEY, state.playerName); // remember the name next time
+  } catch {
+    // private browsing etc. — not important
+  }
+  state.screen = 'game';
+  playAgain();
+}
+
+function savedName() {
+  try {
+    return localStorage.getItem(NAME_KEY) || '';
+  } catch {
+    return '';
+  }
 }
 
 // --- Debug panel (open the game with ?debug in the URL) -----------------------
@@ -670,6 +742,7 @@ initRender(document.getElementById('app'), {
   onCellClick,
   onCatch: catchCheat,
   onPlayAgain: playAgain,
+  onStart: startGame,
   onPowerUp: activatePowerUp,
   onOwnLineChoice: chooseOwnLine,
   onAmend: chooseAmendment,
@@ -677,4 +750,7 @@ initRender(document.getElementById('app'), {
   onDebug: debugAction,
 });
 on('change', () => emit('render'));
-playAgain(); // start the first match
+resetMatch();
+state.playerName = savedName();
+state.screen = 'title'; // ask for the player's name first
+emit('change');

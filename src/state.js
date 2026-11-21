@@ -13,7 +13,8 @@ export const MAX_TURNS = 30;   // after 30 player turns the FINAL RULE decides t
 export const RULE_EVERY = 4;   // Otto rewrites a rule every 4 player turns
 
 export const state = {
-  screen: 'game',          // 'game' for now (title/end screens come in Milestone 5)
+  screen: 'title',         // 'title' (enter your name) or 'game'
+  playerName: '',          // shown to Otto's memory (max 20 characters)
   era: '1952',             // '1952' = the opening, styled like OXO on the EDSAC; 'modern' = sticker scrapbook
   transitioning: false,    // true while the 1952 screen glitches and peels away (input is blocked)
   board: createBoard(3, 3),
@@ -58,6 +59,11 @@ export const state = {
 
   stats: newStats(),
 
+  // --- What happened this match (saved to Otto's memory in Snowflake) ---
+  log: newLog(),
+  // --- Otto's memory: stats from Snowflake, via our API ---
+  memory: { status: 'idle', stats: null }, // status: 'idle' | 'loading' | 'ready' | 'offline'
+
   // Debug panel: open the game with ?debug in the URL.
   debug: {
     enabled: new URLSearchParams(location.search).has('debug'),
@@ -65,6 +71,10 @@ export const state = {
     message: '',
   },
 };
+
+function newLog() {
+  return { firstMove: null, cheatsUsed: [], cheatsCaught: [], powerupsUsed: [], saved: false };
+}
 
 function newStats() {
   return { cheatsUsed: 0, cheatsCaught: 0, powerUpsUsed: 0, pointsEarned: 0, rulesChanged: 0 };
@@ -107,6 +117,7 @@ export function resetMatch() {
     mode: null,
     extraMarks: 0,
     stats: newStats(),
+    log: newLog(),
   });
 }
 
