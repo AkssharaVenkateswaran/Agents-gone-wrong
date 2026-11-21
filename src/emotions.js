@@ -58,14 +58,19 @@ export function ottoLook(state, now = Date.now()) {
   }
   // The Otto-wins screen: victorious for good.
   if (state.ending === 'banner' && state.result === 'O') return look('victorious');
-  // Telegraphing a cheat: scheming face, but its base colour stays.
-  if (state.telegraph) return look('scheming', 'scheming', COLOURS_FOR[base] || 'calm');
-  if (temp) return look(temp, FACE_FOR[temp], COLOURS_FOR[temp] || COLOURS_FOR[base] || 'calm');
+  // Temporary mood priority (highest first):
+  //   defeated / victorious > scheming > thinking > happy / bored (/ glitching) > base mood.
+  // So "happy" (at the start of a round) never hides thinking or scheming.
+  const tempLook = () => look(temp, FACE_FOR[temp], COLOURS_FOR[temp] || COLOURS_FOR[base] || 'calm');
+  if (temp === 'defeated' || temp === 'victorious') return tempLook();
+  // Telegraphing a cheat (or the debug "scheming" mood): scheming face, but its base colour stays.
+  if (state.telegraph || temp === 'scheming') return look('scheming', 'scheming', COLOURS_FOR[base] || 'calm');
   // Thinking: eyes look around. Above 50 patience it also wears the "thinking" colours.
   if (state.ottoThinking) {
     const colours = state.patience > 50 ? 'thinking' : COLOURS_FOR[base];
     return { ...look('thinking', 'thinkLeft', colours), thinking: true };
   }
+  if (temp) return tempLook(); // happy, bored, glitching
   return look(base);
 }
 
