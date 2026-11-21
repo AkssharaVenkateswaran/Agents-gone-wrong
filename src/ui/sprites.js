@@ -115,6 +115,11 @@ const GLYPHS = {
   ':': ['...', '.g.', '...', '.g.', '...'],
   ')': ['g..', '.g.', '.g.', '.g.', 'g..'],
   '(': ['..g', '.g.', '.g.', '.g.', '..g'],
+  '<': ['..g', '.g.', 'g..', '.g.', '..g'],
+  '?': ['ggg', '..g', '.gg', '...', '.g.'],
+  '!': ['.g.', '.g.', '.g.', '...', '.g.'],
+  '#': ['g.g', 'ggg', 'g.g', 'ggg', 'g.g'],
+  '@': ['ggg', 'g.g', 'g.g', 'g..', 'ggg'],
   3: ['ggg', '..g', '.gg', '..g', 'ggg'],
   4: ['g.g', 'g.g', 'ggg', '..g', '..g'],
   5: ['ggg', 'g..', 'ggg', '..g', 'ggg'],
@@ -218,10 +223,10 @@ export const OTTO_FACES = {
   }),
   scheming: face((g) => text(g, 4, 4, '>:)', 'g')),
   furious: face((g) => {
-    rect(g, 3, 2, 2, 1, 'p'); rect(g, 5, 3, 2, 1, 'p');      // angry brows
-    rect(g, 15, 2, 2, 1, 'p'); rect(g, 13, 3, 2, 1, 'p');
-    rect(g, 4, 5, 3, 2, 'p'); rect(g, 13, 5, 3, 2, 'p');     // eyes
-    for (let x = 4; x < 16; x += 2) { plot(g, x, 9, 'p'); plot(g, x + 1, 10, 'p'); } // zig-zag
+    rect(g, 3, 2, 2, 1, 'r'); rect(g, 5, 3, 2, 1, 'r');      // angry brows
+    rect(g, 15, 2, 2, 1, 'r'); rect(g, 13, 3, 2, 1, 'r');
+    rect(g, 4, 5, 3, 2, 'r'); rect(g, 13, 5, 3, 2, 'r');     // eyes
+    for (let x = 4; x < 16; x += 2) { plot(g, x, 9, 'r'); plot(g, x + 1, 10, 'r'); } // zig-zag
   }),
   // Thinking: two frames, eyes looking left then right.
   thinkLeft: face((g) => {
@@ -232,12 +237,72 @@ export const OTTO_FACES = {
     rect(g, 6, 4, 2, 2, 'g'); rect(g, 15, 4, 2, 2, 'g');
     rect(g, 8, 9, 5, 1, 'g');
   }),
+  happy: face((g) => {
+    rect(g, 4, 3, 2, 1, 'g'); plot(g, 3, 4, 'g'); plot(g, 6, 4, 'g');      // ^ eyes
+    rect(g, 14, 3, 2, 1, 'g'); plot(g, 13, 4, 'g'); plot(g, 16, 4, 'g');
+    plot(g, 5, 8, 'g'); rect(g, 6, 9, 8, 1, 'g'); plot(g, 14, 8, 'g');     // smile
+    rect(g, 7, 10, 6, 1, 'g');
+  }),
+  irritated: face((g) => {
+    rect(g, 3, 3, 4, 1, 'y'); rect(g, 13, 3, 4, 1, 'y');                   // flat brows
+    rect(g, 4, 5, 2, 1, 'y'); rect(g, 14, 5, 2, 1, 'y');                   // narrowed eyes
+    rect(g, 5, 9, 10, 2, 'y');                                              // gritted teeth
+    for (const x of [7, 9, 11, 13]) { plot(g, x, 9, 's'); plot(g, x, 10, 's'); }
+    plot(g, 17, 1, 'y'); plot(g, 18, 2, 'y');                               // vein tick
+  }),
+  unhinged: face((g) => {
+    rect(g, 2, 2, 6, 1, 'v'); rect(g, 2, 7, 6, 1, 'v');                    // one big ringed eye
+    rect(g, 2, 2, 1, 6, 'v'); rect(g, 7, 2, 1, 6, 'v'); rect(g, 4, 4, 2, 2, 'h');
+    rect(g, 13, 4, 2, 2, 'v');                                              // one tiny pupil
+    rect(g, 3, 9, 6, 1, 'p'); rect(g, 9, 10, 7, 1, 'p'); rect(g, 5, 11, 5, 1, 'c'); // glitched grin
+  }),
+  glitching: face((g) => {
+    text(g, 3, 4, '#@!', 'p');
+    rect(g, 0, 1, 7, 1, 'c'); rect(g, 12, 11, 8, 1, 'c');                  // tear lines
+  }),
+  defeated: face((g) => {
+    plot(g, 3, 4, 'c'); rect(g, 4, 5, 3, 1, 'c');                          // droopy eyes
+    plot(g, 16, 4, 'c'); rect(g, 13, 5, 3, 1, 'c');
+    rect(g, 6, 9, 8, 1, 'c'); plot(g, 5, 10, 'c'); plot(g, 14, 10, 'c');   // frown
+    rect(g, 4, 7, 1, 2, 'h');                                               // tear
+  }),
+  victorious: face((g) => {
+    text(g, 2, 2, '>', 'y'); text(g, 14, 2, '<', 'y');                     // > < squint
+    rect(g, 4, 8, 12, 1, 'y'); rect(g, 5, 9, 10, 2, 'y'); rect(g, 6, 11, 8, 1, 'y'); // big grin
+    rect(g, 6, 9, 8, 1, 'p');                                               // tongue
+  }),
   // Meltdown: a blue crash screen with a sad face.
   crash: face((g) => {
     rect(g, 0, 0, 20, 13, 'n');
     text(g, 4, 4, ':(', 'w', 1);
     rect(g, 3, 11, 14, 1, 'w');
   }),
+};
+
+// Otto's casing colours for each mood. OTTO_CASING uses m/M for the body and p/P
+// for the antenna ball, so passing one of these to sprite() recolours it:
+//   sprite(OTTO_CASING, 'otto-casing', { ...PALETTE, ...OTTO_COLOURS[mood] })
+export const OTTO_COLOURS = {
+  calm:      { m: '#C8C2E8', M: '#8E86C4', p: '#FF4F9A', P: '#C42A74' }, // lavender, pink ball
+  happy:     { m: '#C8C2E8', M: '#8E86C4', p: '#9BE564', P: '#5FAE3C' }, // lavender, lime ball
+  thinking:  { m: '#C8C2E8', M: '#8E86C4', p: '#5CD6FF', P: '#2E9CC4' }, // lavender, cyan ball
+  irritated: { m: '#FF9F43', M: '#C7701F', p: '#FF9F43', P: '#C7701F' }, // orange
+  furious:   { m: '#FF3B4E', M: '#B81E33', p: '#FF3B4E', P: '#B81E33' }, // red
+  unhinged:  { m: '#B86BFF', M: '#7A3BC4', p: '#FF4F9A', P: '#C42A74' }, // violet
+  glitching: { m: '#B86BFF', M: '#7A3BC4', p: '#FFE45C', P: '#D9B92E' }, // violet, yellow ball
+  defeated:  { m: '#9A95B5', M: '#6E698C', p: '#5CD6FF', P: '#2E9CC4' }, // grey-blue
+  crashed:   { m: '#9A95B5', M: '#6E698C', p: '#9A95B5', P: '#6E698C' }, // grey
+  victorious:{ m: '#FFE45C', M: '#D9B92E', p: '#FF4F9A', P: '#C42A74' }, // gold
+};
+
+// --- Small extras around Otto (outside the casing) ----------------------------------------
+export const OTTO_EXTRAS = {
+  question: outlined(['yyy', '..y', '.yy', '...', '.y.']),               // thinking
+  sweat: outlined(['..c..', '.ccc.', 'ccccc', 'ccccc', '.ccc.']),        // irritated
+  steam: outlined(['.ww..', 'wwww.', '.wwww', '..ww.']),                 // furious
+  spark: ['.y.', 'yoy', '.y.'],                                          // unhinged / glitching
+  sparkle: ['..y..', '..y..', 'yyyyy', '..y..', '..y..'],                // victorious (+)
+  crack: ['h...', '.h..', '.hh.', '...h', '..h.', '..h.', '.h..'],       // a crack on the screen glass
 };
 
 // --- Floppy disks (the power-ups) -------------------------------------------------------

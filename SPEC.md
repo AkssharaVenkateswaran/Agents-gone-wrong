@@ -91,6 +91,11 @@ Rules come in 3 categories, shown as 3 fixed rows in `RULES.TXT`. Only **one rul
 - **Safety:** nothing flashes faster than 2 times per second, no full-screen flashes, and marks, grid lines and the turn indicator stay clear at every stage. With `prefers-reduced-motion`: no wobble, shudder or tearing; the stage shows as static tilt, cracks, colour changes and text glitches only.
 - **Calm mode:** a small moon toggle next to the mute button turns the chaos effects off (remembered in the browser).
 
+### Otto's moods (face AND casing colour, `src/emotions.js`)
+- **Base mood from patience:** 100–76 `smug` in calm lavender (`happy` with a lime antenna ball at the start of a round); 75–51 `irritated` (orange, sweat drop); 50–26 `furious` (red, rising steam); 25–1 `unhinged` (violet, sparks and a crack on his screen glass; `glitching` during glitch bursts); 0 `crashed` (grey, during the rampage, after the red `PATIENCE.SYS NOT FOUND`).
+- **Temporary moods:** thinking (eyes look around, a yellow `?`; cyan antenna ball only above 50 patience), telegraphing a cheat (`scheming`, base colour), `bored` (patience > 75, when the player is slow or the board is over 70% full), `defeated` for 3 s when Otto loses a round, `victorious` (gold, sparkles) for 3 s when Otto wins a round and for good on the Otto-wins screen.
+- The faces, colours and glyphs use the pixel data from `OTTO_EMOTIONS.md` exactly. A colour change wipes in from bottom to top over ~500 ms (just switches with reduced motion); the extras are static in Calm mode and with reduced motion.
+
 ### Otto's cheats (each has a counter)
 | Cheat | What happens | Countered by |
 |---|---|---|

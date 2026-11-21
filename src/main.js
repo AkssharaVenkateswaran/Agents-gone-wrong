@@ -104,6 +104,36 @@ function talk(text) {
   state.ottoSays = !state.calm && stage() >= 2 && Math.random() < 0.3 ? shout(text) : text;
 }
 
+// Otto's mood for a few seconds (defeated, victorious, glitching, bored...), see emotions.js.
+function setTempMood(mood, ms) {
+  const tempMood = { mood, until: Date.now() + ms };
+  state.tempMood = tempMood;
+  emit('change');
+  setTimeout(() => {
+    if (state.tempMood === tempMood) {
+      state.tempMood = null;
+      emit('change');
+    }
+  }, ms);
+}
+
+// A calm Otto (patience above 75) gets bored if the player is slow or the board fills up.
+const BORED_AFTER_MS = 8000;
+let boredTimer = null;
+function watchForBoredom() {
+  clearTimeout(boredTimer);
+  if (state.patience <= 75) return;
+  const filled = state.board.cells.filter(Boolean).length / state.board.cells.length;
+  if (filled > 0.7) setTempMood('bored', 2000);
+  const turn = state.totalTurns;
+  boredTimer = setTimeout(() => {
+    if (isPlayersTurn() && state.totalTurns === turn && state.patience > 75) {
+      talk(say('bored'));
+      setTempMood('bored', 2500);
+    }
+  }, BORED_AFTER_MS);
+}
+
 // Was a rule changed within the last 2 player turns? (For the +3 rule bonus.)
 function soonAfterRuleChange() {
   return state.roundRuleChanges > 0 && state.playerTurns - state.lastRuleChangeTurn < RULE_BONUS_TURNS;
@@ -265,6 +295,7 @@ async function startPlayerTurn() {
 
   emit('change');
   startTurnTimer();
+  watchForBoredom();
 }
 
 // --- The turn timer rule -----------------------------------------------------------
@@ -603,7 +634,10 @@ function ottoNormalMove() {
   }
   state.ottoGrace = false; // the grace turn is over
   if (checkRoundEnd('O')) return;
-  if (stage() === 3 && !state.calm) tearBoard(); // Meltdown: screen tearing on Otto's move
+  if (stage() === 3 && !state.calm) {
+    tearBoard(); // Meltdown: screen tearing on Otto's move...
+    setTempMood('glitching', 700); // ...and Otto glitches with it
+  }
   endOttoTurn();
 }
 
@@ -678,11 +712,13 @@ async function endRound(winner, line, ottoLine) {
     if (soonAfterRuleChange()) earn(POINTS.ruleBonus);
     setPatience(state, before + PATIENCE_LOST_ROUND);
     talk(ottoLine || say('roundLost'));
+    setTempMood('defeated', 3000);
     sfx.win();
   } else if (winner === 'O') {
     state.roundsWon.otto++;
     setPatience(state, before + PATIENCE_WON_ROUND);
     talk(ottoLine || say('roundWon'));
+    setTempMood('victorious', 3000);
     sfx.lose();
   } else {
     talk(ottoLine || say('draw'));
@@ -755,7 +791,7 @@ async function startRampage() {
     state.rampage = { phase };
     if (line !== undefined) state.ottoSays = line;
     emit('change');
-    if (phase === 'chaos') spawnFakePopups(6, 'OTTO.EXE HAS STOPPED CARING'); // pop-ups multiply
+    if (phase === 'chaos') spawnFakePopups(6, 'OTTO.EXE HAS STOPPED CARING', Infinity, true); // pop-ups multiply
     return rampagePause(ms);
   };
   const played =
@@ -936,8 +972,21 @@ function debugAction(action, value) {
   } else if (action === 'turn19') {
     state.playerTurns = Math.max(state.playerTurns, ROUND_TURN_CAP - 1);
     state.debug.message = 'Your next move triggers SUDDEN DEATH.';
-  } else if (action === 'patienceDown' || action === 'patienceOne') {
-    setPatience(state, action === 'patienceOne' ? 1 : Math.max(1, state.patience - 25));
+  } else if (action === 'mood') {
+    // Show one of Otto's temporary moods (thinking shows the thinking animation).
+    if (value === 'thinking') {
+      state.ottoThinking = true;
+      setTimeout(() => {
+        state.ottoThinking = false;
+        emit('change');
+      }, 2500);
+    } else {
+      setTempMood(value, 3000);
+    }
+    state.debug.message = `Otto's mood: ${value}`;
+  } else if (action === 'patienceUp' || action === 'patienceDown' || action === 'patienceOne') {
+    const next = { patienceUp: state.patience + 25, patienceDown: state.patience - 25, patienceOne: 1 }[action];
+    setPatience(state, Math.max(1, Math.min(100, next)));
     const now = stage();
     if (now > state.announcedStage) {
       state.announcedStage = now;
@@ -985,11 +1034,14 @@ initRender(document.getElementById('app'), {
   onSkip: skipRampage,
   onDebug: debugAction,
 });
-initChaos(() => ({
-  stage: stage(),
-  calm: state.calm,
-  active: state.screen === 'game' && !state.matchOver && !state.rampage,
-}));
+initChaos(
+  () => ({
+    stage: stage(),
+    calm: state.calm,
+    active: state.screen === 'game' && !state.matchOver && !state.rampage,
+  }),
+  () => setTempMood('glitching', 700), // Meltdown glitch bursts: Otto glitches too
+);
 on('change', () => emit('render'));
 resetMatch();
 state.playerName = recall(NAME_KEY);

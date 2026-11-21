@@ -90,14 +90,18 @@ export function setLights(on) {
 const TITLE = 'AGENTS GONE WRONG';
 const TITLE_GLITCHES = ['AGENTS GONE WR0NG', 'AG3NTS GONE WRONG', 'AGENTS G0NE WRONG', 'AGENT$ GONE WRONG'];
 
-export function initChaos(getInfo) {
+// `onGlitch` is called for each glitch burst at the Meltdown stage (Otto glitches too).
+export function initChaos(getInfo, onGlitch = () => {}) {
   let tick = 0;
   setInterval(() => {
     tick++;
     const { stage, calm, active } = getInfo();
     if (!active || calm) return;
     if (stage >= 1 && tick % 10 === 0 && !reduceMotion()) staticBand();
-    if (stage >= 2 && tick % 7 === 3) glitchTitle();
+    if (stage >= 2 && tick % 7 === 3) {
+      glitchTitle();
+      if (stage >= 3) onGlitch();
+    }
     if (stage >= 2 && tick % 14 === 6) spawnFakePopups(1, 'OTTO.EXE is not responding', stage >= 3 ? 2 : 1);
   }, 1000);
 }
@@ -125,12 +129,16 @@ function glitchTitle() {
   }, 450);
 }
 
-// Fake pop-ups in EMPTY space (never over the board). Both buttons say WAIT and close it.
-export function spawnFakePopups(count, text, max = Infinity) {
+// Fake pop-ups in EMPTY space (never over the board, and normally not over any
+// panel either). Both buttons say WAIT and close it. During the rampage (`anywhere`)
+// they may cover the other panels, but still never the board.
+const PANELS = '.otto-area, .rules, .toolbox, .topbar, .turn-indicator, .message-line';
+export function spawnFakePopups(count, text, max = Infinity, anywhere = false) {
   const monitor = document.querySelector('.monitor')?.getBoundingClientRect();
+  const panels = anywhere ? [] : [...document.querySelectorAll(PANELS)].map((el) => el.getBoundingClientRect());
   for (let n = 0; n < count; n++) {
     if (document.querySelectorAll('.fake-popup').length >= max) return;
-    const spot = freeSpot(monitor);
+    const spot = freeSpot([monitor, ...panels].filter(Boolean));
     if (!spot) return;
     const popup = document.createElement('div');
     popup.className = 'fake-popup window';
@@ -149,13 +157,12 @@ export function spawnFakePopups(count, text, max = Infinity) {
   }
 }
 
-// Somewhere a 260x130 pop-up fits without covering the monitor (or other pop-ups).
-function freeSpot(monitor) {
+// Somewhere a 260x130 pop-up fits without covering `avoid` (or other pop-ups).
+function freeSpot(avoid) {
   const w = 260;
   const h = 130;
-  const taken = [...document.querySelectorAll('.fake-popup')].map((el) => el.getBoundingClientRect());
-  if (monitor) taken.push(monitor);
-  for (let attempt = 0; attempt < 40; attempt++) {
+  const taken = [...document.querySelectorAll('.fake-popup')].map((el) => el.getBoundingClientRect()).concat(avoid);
+  for (let attempt = 0; attempt < 60; attempt++) {
     const x = 16 + Math.random() * (window.innerWidth - w - 32);
     const y = 72 + Math.random() * (window.innerHeight - h - 120);
     const overlaps = taken.some((r) => x < r.right + 8 && x + w > r.left - 8 && y < r.bottom + 8 && y + h > r.top - 8);

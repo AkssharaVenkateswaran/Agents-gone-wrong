@@ -70,6 +70,7 @@ export function freshRoundState(roundNumber) {
     turnNumber: 0,         // Otto's turns in this round (cheat cooldowns and spacing)
     moveCount: 0,          // every mark placed this round (see board.stamp)
     ottoThinking: false,
+    tempMood: null,        // a mood that overrides Otto's normal one for a few seconds: { mood, until }
     ottoTurnStartedAt: 0,  // when Otto's current turn began (for the monitor's nudge/shudder)
     roundOver: false,
     roundEnd: null,        // the ROUND_END.EXE pop-up: { winner, change, suddenDeath }

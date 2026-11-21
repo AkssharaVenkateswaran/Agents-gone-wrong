@@ -11,7 +11,8 @@
 import { state, on, ROUND_TURN_CAP, OTTO_ROUNDS_TO_WIN } from '../state.js';
 import { CHEATS, MAX_GRID_SIZE } from '../cheats.js';
 import { POWERUPS, canAfford } from '../powerups.js';
-import { ottoMood, stageOf, stageProgress, STAGES } from '../agent.js';
+import { stageOf, stageProgress, STAGES } from '../agent.js';
+import { ottoLook } from '../emotions.js';
 import {
   RULES,
   CATEGORIES,
@@ -45,6 +46,8 @@ import {
   CURSOR_HAND,
   PALETTE,
   MOON_SPRITE,
+  OTTO_COLOURS,
+  OTTO_EXTRAS,
   crackSprite,
   wobblyLine,
 } from './sprites.js';
@@ -339,7 +342,7 @@ function renderTitle() {
         ${titleBar('LOGIN.EXE')}
         <div class="window-body">
           <h1 class="game-title big">AGENTS GONE WRONG</h1>
-          <div class="title-otto">${sprite(OTTO_CASING, 'otto-casing')}<span class="otto-face">${sprite(OTTO_FACES.smug)}</span></div>
+          <div class="title-otto">${ottoCasing('happy')}<span class="otto-face">${sprite(OTTO_FACES.happy)}</span></div>
           <p class="premise">Tic-tac-toe is solved. The agent didn't like that.</p>
           <form id="name-form" class="name-form">
             <label for="player-name">&gt; ENTER YOUR NAME:</label>
@@ -652,21 +655,48 @@ function bubbleJitter() {
   return since(saysAt, 700) !== null ? 'jitter' : '';
 }
 
-function ottoFace() {
-  if (state.rampage) return 'crash';
-  if (state.telegraph) return 'scheming';
-  if (state.matchOver && state.result === 'O') return 'smug';
-  return ottoMood(state);
+// Otto's casing in a mood's colours (see OTTO_COLOURS).
+function ottoCasing(coloursKey) {
+  return sprite(OTTO_CASING, 'otto-casing', { ...PALETTE, ...OTTO_COLOURS[coloursKey] });
+}
+
+// When the casing colour changes it wipes from bottom to top over ~500ms:
+// the old colour underneath, the new colour on top, revealed by a growing clip.
+let shownColours = 'calm';
+let previousColours = 'calm';
+let coloursChangedAt = 0;
+function casingWithWipe(coloursKey) {
+  if (coloursKey !== shownColours) {
+    previousColours = shownColours;
+    shownColours = coloursKey;
+    coloursChangedAt = Date.now();
+  }
+  const elapsed = since(coloursChangedAt, 500);
+  if (elapsed === null) return ottoCasing(coloursKey);
+  return `<span class="casing-wipe">${ottoCasing(previousColours)}
+    <span class="wipe-new" style="animation-delay:${-elapsed}ms">${ottoCasing(coloursKey)}</span></span>`;
+}
+
+// The little pixel extras around Otto for its mood (static in Calm mode / reduced motion).
+function ottoExtras(extras) {
+  const parts = {
+    question: `<span class="extra question">${sprite(OTTO_EXTRAS.question)}</span>`,
+    sweat: `<span class="extra sweat">${sprite(OTTO_EXTRAS.sweat)}</span>`,
+    steam: `<span class="extra steam left">${sprite(OTTO_EXTRAS.steam)}</span><span class="extra steam right">${sprite(OTTO_EXTRAS.steam)}</span>`,
+    sparks: [1, 2, 3, 4].map((n) => `<span class="extra spark s${n}">${sprite(OTTO_EXTRAS.spark)}</span>`).join(''),
+    crack: `<span class="extra glass-crack">${sprite(OTTO_EXTRAS.crack)}</span>`,
+    sparkles: [1, 2, 3].map((n) => `<span class="extra sparkle k${n}">${sprite(OTTO_EXTRAS.sparkle)}</span>`).join(''),
+  };
+  return extras.map((name) => parts[name]).join('');
 }
 
 function renderOtto() {
-  const faceName = ottoFace();
-  const thinking = state.ottoThinking && !state.telegraph;
+  const look = ottoLook(state);
   // Thinking: two faces (eyes left / eyes right) that take turns, slowly.
-  const face = thinking
+  const face = look.thinking
     ? `<span class="otto-face think">${sprite(OTTO_FACES.thinkLeft, 'f1')}${sprite(OTTO_FACES.thinkRight, 'f2')}</span>`
-    : `<span class="otto-face ${state.telegraph ? 'flicker' : ''}">${sprite(OTTO_FACES[faceName])}</span>`;
-  const bubble = thinking
+    : `<span class="otto-face ${state.telegraph ? 'flicker' : ''}">${sprite(OTTO_FACES[look.face])}</span>`;
+  const bubble = look.thinking
     ? '<span class="dots" aria-label="Otto is thinking"><i></i><i></i><i></i></span>'
     : escapeHtml(state.ottoSays);
   const patience = state.patience;
@@ -674,13 +704,14 @@ function renderOtto() {
   const segments = 20;
   const full = Math.round((patience / 100) * segments);
   const bar = Array.from({ length: segments }, (_, n) => `<i class="${n < full ? 'on' : ''}"></i>`).join('');
+  const redScreen = state.rampage && ['red', 'fine'].includes(state.rampage.phase);
 
   return `
     <section class="otto-area">
-      <button id="otto" class="otto" aria-label="Otto (${faceName}). Click it, or press C, while it's scheming to catch a cheat.">
-        ${state.rampage ? sprite(OTTO_CASING, 'otto-casing', { ...PALETTE, m: '#FF3B4E', M: '#B81E33' }) : sprite(OTTO_CASING, 'otto-casing')}
-        ${state.rampage ? '<span class="otto-screen-text">PATIENCE.SYS<br>NOT FOUND</span>' : face}
-        <span class="sparks" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <button id="otto" class="otto mood-${look.mood}" aria-label="Otto (${look.mood}). Click it, or press C, while it's scheming to catch a cheat.">
+        ${casingWithWipe(look.colours)}
+        ${redScreen ? '<span class="otto-screen-text">PATIENCE.SYS<br>NOT FOUND</span>' : face}
+        ${ottoExtras(look.extras)}
       </button>
       <div class="bubble ${bubbleJitter()}" role="status" aria-live="polite">${bubble}</div>
       <div class="patience">
@@ -834,7 +865,7 @@ function renderEnding() {
         ${titleBar('RESULT.EXE')}
         <div class="window-body">
           <p class="headline">OTTO WINS</p>
-          <div class="ending-otto">${sprite(OTTO_CASING, 'otto-casing')}<span class="otto-face">${sprite(OTTO_FACES.smug)}</span></div>
+          <div class="ending-otto">${ottoCasing('victorious')}<span class="otto-face">${sprite(OTTO_FACES.victorious)}</span>${ottoExtras(['sparkles'])}</div>
           <p class="ending-line">OTTO: ...I cheated, obviously.</p>
           <p class="ending-line">Otto won ${state.roundsWon.otto} rounds before you could drain its patience (${state.patience} left).</p>
           ${renderLeaderboard()}
@@ -875,6 +906,7 @@ function renderDebug() {
       <summary>DEBUG.EXE</summary>
       <div class="debug-body">
         <div class="debug-row">
+          <button class="debug-btn" data-debug="patienceUp">Patience +25</button>
           <button class="debug-btn" data-debug="patienceDown">Patience −25</button>
           <button class="debug-btn" data-debug="patienceOne">Patience → 1</button>
           <button class="debug-btn" data-debug="rampage">Trigger rampage</button>
@@ -886,6 +918,8 @@ function renderDebug() {
           <button class="debug-btn" data-debug="points">+10 points</button>
           <button class="debug-btn" data-debug="cooldowns">Clear cooldowns</button>
         </div>
+        Otto's mood: <div class="debug-row">${['happy', 'thinking', 'scheming', 'bored', 'defeated', 'victorious', 'glitching']
+          .map((mood) => `<button class="debug-btn" data-debug="mood" data-value="${mood}">${mood}</button>`).join('')}</div>
         Rule now: <div class="debug-row">${ruleButtons}</div>
         Otto's next cheat: <div class="debug-row">${cheatButtons}</div>
         <div>Round ${state.roundNumber} · turn ${currentTurn(state)} · ${state.board.rows}×${state.board.cols} · patience ${state.patience}</div>

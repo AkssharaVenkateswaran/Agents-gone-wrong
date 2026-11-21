@@ -708,16 +708,8 @@ body.stage-2:not(.calm) .title-bar, body.stage-3:not(.calm) .title-bar { backgro
 .fake-buttons { display: flex; gap: 8px; justify-content: center; }
 .btn.small { padding: 4px 8px; font-size: 12px; }
 
-/* Stage 3: RGB-split headings, sparks around Otto, scribbles on the Rule Book. */
+/* Stage 3: RGB-split headings and scribbles on the Rule Book (Otto's sparks: see "Otto's moods"). */
 body.stage-3:not(.calm) :is(.game-title, .win-banner, .title-bar) { text-shadow: -2px 0 0 var(--pink), 2px 0 0 var(--cyan); }
-.sparks { display: none; position: absolute; inset: 0; pointer-events: none; }
-body.stage-3:not(.calm) .sparks { display: block; }
-.sparks i { position: absolute; width: 6px; height: 6px; background: var(--yellow); box-shadow: 6px 6px 0 #ff9f43; animation: spark 1.4s steps(4) infinite; }
-.sparks i:nth-child(1) { left: -10px; top: 20%; }
-.sparks i:nth-child(2) { right: -10px; top: 35%; animation-delay: 0.35s; }
-.sparks i:nth-child(3) { left: 10%; top: -8px; animation-delay: 0.7s; }
-.sparks i:nth-child(4) { right: 15%; bottom: 10%; animation-delay: 1.05s; }
-@keyframes spark { 50% { translate: 4px -8px; opacity: 0.2; } }
 .rules-scribble { display: none; position: absolute; inset: 40px 0 0; width: 100%; height: calc(100% - 40px); pointer-events: none; z-index: 2; }
 .rules-scribble path { fill: none; stroke: var(--pink); stroke-width: 3; vector-effect: non-scaling-stroke; opacity: 0.6; }
 body.stage-3:not(.calm) .rules-scribble { display: block; }
@@ -766,6 +758,39 @@ body.stage-3:not(.calm) .rules-scribble { display: block; }
 .black-screen.final .final-box { display: grid; gap: 16px; justify-items: center; max-width: 560px; padding: 16px; text-align: center;
   color: var(--cream); font: 24px/1.2 var(--text-font); animation: fade-in 1.5s ease-out; }
 
+/* ==========================================================================
+   Otto's moods: casing colour wipe and the little extras around him
+   ========================================================================== */
+/* A new casing colour wipes in from bottom to top (~500ms, no flashing). */
+.casing-wipe { position: relative; display: block; }
+.wipe-new { position: absolute; inset: 0; animation: wipe-up 0.5s steps(8) both; }
+@keyframes wipe-up { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0 0 0 0); } }
+
+.extra { position: absolute; pointer-events: none; }
+.extra:is(.question, .sweat, .steam) { --px: 3; }
+.extra.question { right: -14px; top: -6px; animation: bob 1.2s steps(2) infinite; }
+.extra.sweat { right: -12px; top: 40%; animation: drip 1.6s steps(4) infinite; }
+.extra.steam.left { left: -16px; top: 12%; animation: rise 1.8s steps(6) infinite; }
+.extra.steam.right { right: -16px; top: 12%; animation: rise 1.8s steps(6) 0.9s infinite; }
+.extra.spark { --px: 2; animation: spark 1.4s steps(4) infinite; }
+.extra.spark.s1 { left: -12px; top: 18%; }
+.extra.spark.s2 { right: -12px; top: 32%; animation-delay: 0.35s; }
+.extra.spark.s3 { left: 12%; top: -10px; animation-delay: 0.7s; }
+.extra.spark.s4 { right: 12%; bottom: 12%; animation-delay: 1.05s; }
+/* a white crack on the right edge of his screen glass */
+.extra.glass-crack { left: calc(21px * var(--px)); top: calc(12px * var(--px)); } /* uses Otto's own pixel size */
+.extra.sparkle { --px: 2; animation: twinkle 1.6s steps(2) infinite; }
+.extra.sparkle.k1 { left: -16px; top: 10%; }
+.extra.sparkle.k2 { right: -16px; top: 30%; animation-delay: 0.5s; }
+.extra.sparkle.k3 { left: 45%; top: -16px; animation-delay: 1s; }
+@keyframes bob { 50% { translate: 0 -3px; } }
+@keyframes drip { 100% { translate: 0 12px; opacity: 0; } }
+@keyframes rise { 0% { translate: 0 0; opacity: 1; } 100% { translate: 0 -18px; opacity: 0; } }
+@keyframes spark { 50% { translate: 4px -6px; opacity: 0.3; } }
+@keyframes twinkle { 50% { opacity: 0.4; } }
+/* Calm mode and reduced motion: the extras stay still. */
+body.calm .extra { animation: none; }
+
 /* --- Reduced motion: nothing drifts, bounces, spins or flies. --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .drift, .dots i, .otto-face.think .f1, .otto-face.think .f2, .otto-face.flicker,
@@ -776,6 +801,7 @@ body.stage-3:not(.calm) .rules-scribble { display: block; }
   .disk:not(.greyed):hover, .rule-card:hover { transform: none; }
   .alert-popup { animation: fade-out 1.6s steps(1) forwards; }
   .confetti { display: none; }
+  .extra, .wipe-new { animation: none; }
   .monitor { animation: none !important; transition: none; }  /* static tilt only */
   .bubble.jitter, .sparks i, .static-band, .fall, .rampage-chaos .disk, .rampage-chaos .rules, .shards i { animation: none !important; }
   .crt-off i { animation: fade-out 1.2s steps(2) forwards; }
