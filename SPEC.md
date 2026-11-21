@@ -7,7 +7,7 @@ Tic-tac-toe is a solved game: with perfect play, every game is a draw. The oppon
 - Vite + vanilla JavaScript (ES modules), HTML, CSS. No frontend framework, no game engine.
 - **All art is pixel sprites drawn in code** (see Art direction) — no external image files.
 - Google Fonts: **"Press Start 2P"** (title, score, headings, buttons) and **"VT323"** (all other text).
-- Optional sound effects using the Web Audio API (simple synthesised pops, scribbles, stamps) — no audio files.
+- Optional sound effects using the Web Audio API (simple synthesised retro square-wave beeps) — no audio files. A mute button sits in the top bar.
 - Must run with `npm install && npm run dev`, and build to static files with `npm run build`.
 
 Suggested structure:
@@ -22,9 +22,9 @@ src/
   scoring.js       // point rules
   dialogue.js      // Otto's lines, grouped by situation
   ui/
-    render.js      // renders board, HUD, tray, speech bubbles from state
-    stickers.js    // SVG sticker components (X, O, Otto, minion agent, lightbulb, eraser, glue...)
-    effects.js     // stamp, peel, wobble, flick, table-flip, lights-out effects
+    render.js      // renders the top bar, TOOLBOX.EXE, the CRT monitor and board, Otto and RULES.TXT from state
+    sprites.js     // pixel sprites as string arrays (X, O, Otto's CRT and faces, minion robot, floppy disks, rule icons...)
+    effects.js     // pop-up alerts (CAUGHT!), point pops, board spin, lights-out effects
   styles.css
 ```
 
@@ -35,14 +35,14 @@ src/
 - **Round 1:** Otto plays fairly but imperfectly (40% random moves), so the player learns the basics. After round 1 Otto says something like *"Wait... this game is SOLVED. Nobody can win. Ugh. Boring. New rules."*
 - **Round 2 onward:** Otto plays perfect minimax AND cheats. Otto has a **Frustration meter** (0–100, shown in the HUD) that rises whenever a game heads toward a draw or the player counters a cheat. Higher frustration = more frequent and more chaotic cheats.
 - Otto can cheat **at most once per turn**. Each cheat has a **cooldown** (a few turns).
-- **Telegraph every cheat:** ~1 second before a cheat, Otto wobbles on screen with a "hehe…" bubble. If the player clicks Otto during this window they **Catch** the cheat: it's blocked, they get bonus points, and a "CAUGHT!" rubber stamp appears.
+- **Telegraph every cheat:** ~1 second before a cheat, Otto's screen flickers `>:)` and it says "hehe…" in its bubble. If the player clicks Otto during this window they **Catch** the cheat: it's blocked, they get bonus points, and a small `CAUGHT!` pixel window pops up with a stamp effect.
 
 ### Otto's cheats (each has a counter)
 | Cheat | What happens | Countered by |
 |---|---|---|
-| **Lights Out** | The page fades dark; the player only sees a small torch circle around the cursor | **Light Switch** |
+| **Lights Out** | The room goes dark except for the CRT monitor's glow; the player only sees a hard-edged pixel torch circle around the cursor | **Light Switch** |
 | **Extra Line** | Otto scribbles a new row or column onto the grid and instantly puts an O in it | **Eraser** (removes Otto's added line and its marks) |
-| **Minion Drop** | Otto throws 1–2 tiny minion-agent stickers onto empty squares, which become unclickable | **Flick** (click a minion to flick it off the board) |
+| **Minion Drop** | Otto throws 1–2 tiny pixel minion robots onto empty squares, which become unclickable | **Flick** (click a minion to flick it off the board) |
 | **Mark Steal** | Otto repaints one of the player's X marks into an O | **Glue Stick** (undo the steal, and that mark is protected forever) |
 | **Double Move** | Otto places two O marks in one turn | **Time Out** (Otto skips its next turn) |
 | **Board Spin** | The board rotates 90° | **Paperweight** (undo the spin, and blocks spins for 3 turns) |
@@ -61,7 +61,7 @@ Lights Out lasts until countered or 3 player turns pass. It must be a smooth fad
 | **My Own Line** | 5 | The player draws their own extra row or column and places a free X in it |
 | **Double Mark** | 6 | The player places two X marks this turn |
 
-Power-ups sit in a tray of sticker buttons at the bottom of the screen, each showing its cost. Unaffordable or currently useless power-ups look faded and half-peeled.
+Power-ups are pixel floppy disks in the `TOOLBOX.EXE` window on the left, each with its name on the label and its cost as a pixel number. Unaffordable or currently useless power-ups are greyed out.
 
 ### Earning points
 - Start each match with 3 points
@@ -71,26 +71,27 @@ Power-ups sit in a tray of sticker buttons at the bottom of the screen, each sho
 - +4 for catching a cheat during its telegraph window
 - +5 for winning a round
 
-Show point gains as small "+3" sticker pops that float up and fade.
+Show point gains as small "+3" pixel pops that float up and fade.
 
 ### Win detection
 Must work on **any grid size** (the grid can grow via Extra Line and My Own Line). A win is **3 in a row** horizontally, vertically or diagonally anywhere on the grid. Squares covered by minions can't be clicked and don't count toward anyone's line. Minimax only needs to handle the standard 3×3 grid; on a larger grid, Otto uses a simple heuristic: win if possible → block if needed → take the best open square.
 
 ### Ending
-- **Player wins the match:** Otto has a meltdown (*"It's SOLVED. It was always solved. Why do I even—"*), flips the table (board and stickers fly off with a paper-crumple animation), and a big "YOU WIN" rubber stamp slams down.
-- **Otto wins:** Otto gloats, then admits *"...I cheated, obviously."* with a "CHEATER WINS" stamp.
+- **Player wins the match:** Otto has a meltdown (*"It's SOLVED. It was always solved. Why do I even—"*), its monitor shows a pixel "crash" screen, the table flips (the big CRT monitor flies off the desk), and a full-screen `YOU WIN!` pixel banner appears with pixel confetti.
+- **Otto wins:** Otto gloats, then admits *"...I cheated, obviously."* A full-screen `OTTO WINS` pixel banner appears, with Otto's monitor showing a smug face.
 - Either way, show a **Play Again** button.
 
 ### Otto's personality
-Smug, petty, theatrical and funny — never cruel. Speaks in sticker speech bubbles. Write at least 5 lines per situation in `dialogue.js`: match start, getting bored, telegraphing a cheat, cheat succeeds, cheat countered, cheat caught, player blocks it, round won, round lost, draw, rising frustration, meltdown. All dialogue is scripted (no API calls) so it works offline and is reliable for demos.
+Smug, petty, theatrical and funny — never cruel. Speaks in yellow pixel speech bubbles (at most 2 lines). Write at least 5 lines per situation in `dialogue.js`: match start, getting bored, telegraphing a cheat, cheat succeeds, cheat countered, cheat caught, player blocks it, round won, round lost, draw, rising frustration, meltdown. All dialogue is scripted (no API calls) so it works offline and is reliable for demos.
 
 ## Screens
-1. **Title screen:** "Agents Gone Wrong" title in marker font on washi tape, Otto sticker waving, "Play" button, one-line premise: *"Tic-tac-toe is solved. The agent didn't like that."*
+1. **Title screen:** a `LOGIN.EXE` window with "AGENTS GONE WRONG" in Press Start 2P (lime with a pink pixel shadow), Otto's pixel CRT, a name input, a chunky `PLAY` button, and the one-line premise: *"Tic-tac-toe is solved. The agent didn't like that."*
 2. **Game screen:**
    - Top HUD: round score (You vs Otto), points counter, Otto's Frustration meter
-   - Centre: the board, with Otto's sticker and speech bubble beside it
-   - Bottom: the power-up tray
-3. **End screen:** stamp, a summary (cheats caught, power-ups used, points earned), Play Again.
+   - Left: `TOOLBOX.EXE` (points and the power-up floppy disks)
+   - Centre: the turn indicator, then the board inside a big pixel CRT monitor (win banner on its screen), then one message line
+   - Right: Otto on a small pixel CRT with its speech bubble and patience bar, then `RULES.TXT`
+3. **End screen:** a full-screen pixel result banner (`RESULT.EXE`), the Humans vs Otto leaderboard, and a `PLAY AGAIN` button.
 
 ## Art direction: retro pixel art
 **Mood:** a cosy 90s computer desk at night: chunky CRT monitors, floppy disks, old operating-system windows, pixel cursors and neon accents. Bright, playful and readable, not dark and gloomy.
@@ -125,16 +126,16 @@ Smug, petty, theatrical and funny — never cruel. Speaks in sticker speech bubb
 ## Accessibility
 - Board is keyboard-playable (arrow keys + Enter; number keys 1–8 for power-ups).
 - No flashing or strobing effects.
-- All sticker buttons have `aria-label`s.
-- Text keeps good contrast on cream paper.
+- All pixel buttons and floppy disks have `aria-label`s.
+- Text keeps good contrast (VT323 at 18–26px; Press Start 2P only for short titles, score, headings and buttons). No flashing faster than 2 times per second.
 
 ## Build in milestones
 After each milestone, make sure `npm run dev` runs without errors and summarise what changed before moving on.
 1. **Playable core:** 3×3 board, player vs Otto (minimax), win/draw detection, rounds and match score. Plain styling is fine.
 2. **Cheats:** cheat system with telegraph, catch, cooldowns and the Frustration meter; implement all 6 cheats.
-3. **Power-ups & points:** scoring, the tray, all 8 power-ups, and win detection on a grown grid.
-4. **Art pass:** apply the full sticker-scrapbook art direction to every element, including Otto's expressions, speech bubbles, washi tape labels and stamps.
-5. **Juice & ending:** sound effects, animations, the table-flip meltdown, end screen, title screen.
+3. **Power-ups & points:** scoring, the toolbox, all 8 power-ups, and win detection on a grown grid.
+4. **Art pass:** apply the retro pixel-art direction to every element, including Otto's expressions, speech bubbles, OS windows and pop-ups.
+5. **Juice & ending:** sound effects, animations, the crash-and-table-flip meltdown, end screen, title screen.
 
 Keep the code simple and well-commented — the team is first-year students who need to understand and present it.
 
