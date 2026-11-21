@@ -40,11 +40,17 @@ const DIRECTION_SETS = {
 // available(state): can Otto (or the player) pick this rule right now?
 // settings(current): win rules only — the new { length, dirs } given the current ones.
 export const RULES = [
-  // Win condition: every round starts with 4 in a row; rule changes move it between 4 and 5.
+  // Win condition: rounds 1-2 start with 3 in a row, round 3+ with 4 in a row.
+  // Rule changes move the length one step at a time (3 -> 4 -> 5, or 5 -> 4).
+  {
+    id: 'three', category: 'win', isDefault: true, // (a starting rule, never drawn as a new one)
+    name: '3 in a row', sentence: '3 in a row in any direction wins.',
+    settings: () => ({ length: 3, dirs: 'all' }),
+  },
   {
     id: 'four', category: 'win',
     name: '4 in a row', sentence: '4 in a row in any direction wins.',
-    available: (state) => winSettings(state).length === 5,
+    available: (state) => winSettings(state).length === 3 || winSettings(state).length === 5,
     settings: () => ({ length: 4, dirs: 'all' }),
   },
   {
@@ -116,9 +122,10 @@ export function getRule(id) {
 }
 
 // The rules every match starts with.
-export function defaultRules() {
+// The rules a round starts with: 3 or 4 in a row, place anywhere, no twist.
+export function defaultRules(winLength = 4) {
   return {
-    win: { ruleId: 'four', sinceTurn: 1, previous: null, settings: { length: 4, dirs: 'all' } },
+    win: { ruleId: winLength === 3 ? 'three' : 'four', sinceTurn: 1, previous: null, settings: { length: winLength, dirs: 'all' } },
     placement: { ruleId: 'anywhere', sinceTurn: 1, previous: null },
     twist: { ruleId: 'noTwist', sinceTurn: 1, previous: null },
   };
@@ -446,6 +453,7 @@ export function winBanner(state) {
 //   N a line that does NOT count   L lava   v falls down   t a square you may use
 //   f a fading mark
 export const RULE_DIAGRAMS = {
+  three: ['....', 'xxx.', '.O..', 'O...'],
   four: ['....', 'xxxx', '.O..', 'O.O.'],
   five: ['.....', 'xxxxx', '.O.O.', '..O..'],
   noDiagonals: ['N...', '.N..', '..N.', 'xxx.'],

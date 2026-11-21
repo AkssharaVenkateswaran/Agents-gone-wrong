@@ -59,9 +59,11 @@ export function freshMatchState() {
 }
 
 // Everything that resets at the start of each round.
-// Round 1 (the tutorial round): 4x4 with 4 in a row. Rounds 2+: 5x5 with 4 in a row.
+// Rounds 1-2: 4x4 with 3 in a row (round 1 is the tutorial round).
+// Round 3+: 5x5 with 4 in a row. (The board is always at least win length + 1.)
 export function freshRoundState(roundNumber) {
-  const size = roundNumber === 1 ? 4 : 5;
+  const winLength = roundNumber <= 2 ? 3 : 4;
+  const size = winLength + 1;
   return {
     roundNumber,
     tutorial: roundNumber === 1, // Otto's threats are pointed out
@@ -81,7 +83,7 @@ export function freshRoundState(roundNumber) {
     notice: '',            // the ONE message line under the monitor
 
     // --- Rules (Otto keeps rewriting them) ---
-    rules: defaultRules(), // the active rule in each category: { win, placement, twist }
+    rules: defaultRules(winLength), // the active rule in each category: { win, placement, twist }
     ruleHistory: [],       // replaced / vetoed / expired rules
     newestCategory: null,  // category of the newest rule (Veto targets it)
     lastRuleChange: null,  // { ruleId, rejected, by } — the latest change

@@ -207,12 +207,12 @@ const pct = (n, total) => `${((100 * n) / total).toFixed(1)}%`;
 const started = Date.now();
 
 console.log(`Balance test, seed 2026\n`);
-console.log(`Round wins at each patience band (${COUNT} rounds each; 1 in 3 is round 1 on 4x4, the rest 5x5):\n`);
+console.log(`Round wins at each patience band (${COUNT} rounds each; 2 in 3 are rounds 1-2 on 4x4 with 3 in a row, 1 in 3 is round 3+ on 5x5 with 4 in a row):\n`);
 console.log('| Patience | Otto skill (win / block / best) | Player wins | Otto wins | Draws |');
 console.log('|---|---|---|---|---|');
 for (const band of [{ label: '100-76', patience: 88 }, { label: '75-51', patience: 63 }, { label: '50-26', patience: 38 }, { label: '25-1', patience: 12 }]) {
   const results = { X: 0, O: 0, draw: 0 };
-  for (let n = 0; n < COUNT; n++) results[roundAtPatience(band.patience, n % 3 === 0 ? 1 : 2)]++;
+  for (let n = 0; n < COUNT; n++) results[roundAtPatience(band.patience, (n % 3) + 1)]++;
   const skill = SKILL.find((level) => band.patience >= level.minPatience);
   console.log(`| ${band.label} | ${skill.takeWin} / ${skill.block} / ${skill.best} | ${pct(results.X, COUNT)} | ${pct(results.O, COUNT)} | ${pct(results.draw, COUNT)} |`);
 }

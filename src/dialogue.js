@@ -209,6 +209,7 @@ export function shout(text) {
 
 // What Otto says when each rule comes in (by rule id).
 export const ruleLines = {
+  three: ["Back to 3 in a row. Classic. Boring. Classic.", "3 in a row again. Nostalgic, isn't it?"],
   four: ["4 in a row now. Your 3 is worthless.", "3 was too easy. Four. FOUR!"],
   five: ["5 in a row now. Good luck.", "Five. In. A. Row. I'll wait."],
   noDiagonals: ["Diagonals don't count anymore. Sorry, slanty lines.", "Straight lines only. Diagonals are cancelled."],

@@ -390,6 +390,7 @@ function digit(n) {
 }
 
 export const RULE_ICONS = {
+  three: digit(3),
   four: digit(4),
   five: digit(5),
   noDiagonals: icon((g) => {

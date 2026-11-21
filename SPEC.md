@@ -42,7 +42,7 @@ src/
 - Patience changes **only** on round results: Otto **loses** a round **−35**, Otto **wins** a round **+10** (never above 100), draw: no change. Catching or countering cheats and blocking lines do NOT change patience (they still give points and trigger Otto's reactions).
 - So the player needs **3 round wins** if Otto never wins a round, or **4** if Otto wins one or more after the player has started draining him.
 - **Otto wins the match** if he wins **3 rounds** before his patience runs out.
-- **Round 1** (the tutorial round) starts on a **4×4** board with **WIN: 4 IN A ROW**; **rounds 2+** start on **5×5** with 4 in a row. In round 1, when Otto is one move from winning, the threatened square pulses gently and Otto says `> threat: you're about to lose, human`.
+- **Rounds 1–2** start on a **4×4** board with **WIN: 3 IN A ROW** (round 1 is the tutorial round); **round 3+** starts on **5×5** with **WIN: 4 IN A ROW**. In round 1, when Otto is one move from winning, the threatened square pulses gently and Otto says `> threat: you're about to lose, human`.
 - Otto plays fair until the first rule change of each round and **can't win before it**.
 - The board can grow up to **7×7**; new squares pop in. If the board fills up, Otto is forced to add a row or column (at a full 7×7: sudden death).
 - **SUDDEN DEATH:** after **20 player turns** in a round, `SUDDEN DEATH: MOST LINES OF 3 WINS`: every line of 3 in any direction is counted (overlapping lines count too) and the higher count wins the round (equal = draw).
@@ -67,11 +67,11 @@ src/
 Rules come in 3 categories, shown as 3 fixed rows in `RULES.TXT`. Only **one rule per category** is active at a time:
 | Category | Start of each round | Other rules |
 |---|---|---|
-| **WIN** (how to win) | 4 in a row | 5 in a row ↔ 4 in a row; "Diagonals don't count"; "Only diagonals count" (both keep the current length) |
+| **WIN** (how to win) | 3 in a row (rounds 1–2) or 4 in a row (round 3+) | 3 → 4 → 5 in a row and 5 → 4, one step at a time; "Diagonals don't count"; "Only diagonals count" (both keep the current length) |
 | **PLACE** (where you can play) | Place anywhere | "Gravity" (marks fall to the bottom of their column); "Corners are lava" (corners can't be used); "Must touch" (new marks must touch an existing mark, diagonals included) |
 | **TWIST** (a temporary effect) | None | "Fading ink" (marks older than 6 turns disappear); "Mirror" (every move is copied left ↔ right if that square is empty); "10-second timer" (the player loses the turn if time runs out; a pixel ring empties); "Reverse day" (making a line LOSES; lasts 3 turns, shown as pips) |
 
-- After a rule change the board is always at least (win length + 1) squares wide and tall (up to 7×7); it grows automatically when needed. (Round 1's 4×4 start is the one exception.)
+- The board is always at least (win length + 1) squares wide and tall (up to 7×7); it grows automatically when needed.
 - **When:** every **3 player turns**; the first change of each round happens at the start of the player's 3rd turn. `RULES.TXT` shows a countdown ("NEW RULE IN 2 TURNS"), and Otto warns one turn before (*"I've been reading the rules... I don't like them."*).
 - **Only at the start of the player's turn**, after Otto has moved, so the player always makes the first move under every new rule.
 - **No instant wins or losses (hard rule):** before a rule is used it is tried on a copy of the game; if under the new rule **either** player would have a move that wins immediately, the rule is rejected. Otto draws 3 random rules from the safe ones and keeps the one that helps it most. If no rule is safe, the change is postponed by one turn (`NEW RULE DELAYED`). Reverse day only runs out when that is safe too. `npm run fairness` (`scripts/fairness-test.mjs`) runs 500 random rule changes on random mid-game boards and checks this.
