@@ -22,11 +22,11 @@ import {
   pickRandom,
 } from './board.js';
 
-export const MAX_BOARD = 9;        // the board can grow up to 9x9
+export const MAX_BOARD = 7;        // the board can grow up to 7x7
 export const TIMER_SECONDS = 10;    // the "turn timer" twist
-export const RULE_EVERY = 6;        // Otto's scheduled rule change: every 6 player turns...
-export const FIRST_RULE_AT = 5;     // ...starting after the player's 5th turn
-export const MIN_RULE_GAP = 5;      // never more than one change per 5 player turns
+export const RULE_EVERY = 3;        // a rule change every 3 player turns...
+export const FIRST_RULE_AT = 2;     // ...the first at the start of the player's 3rd turn of each round
+export const MIN_RULE_GAP = 2;      // the Rewrite the Rules cheat can bring a change forward by 1 turn
 export const REVERSE_DAY_TURNS = 3; // Reverse day only lasts this many turns
 export const FADE_AFTER_TURNS = 6;  // "Fading ink": marks older than this disappear
 
@@ -40,23 +40,18 @@ const DIRECTION_SETS = {
 // available(state): can Otto (or the player) pick this rule right now?
 // settings(current): win rules only — the new { length, dirs } given the current ones.
 export const RULES = [
-  // Win condition
-  {
-    id: 'three', category: 'win', isDefault: true,
-    name: '3 in a row', sentence: '3 in a row in any direction wins.',
-    settings: () => ({ length: 3, dirs: 'all' }),
-  },
+  // Win condition: every round starts with 4 in a row; rule changes move it between 4 and 5.
   {
     id: 'four', category: 'win',
-    name: '4 in a row', sentence: 'You now need 4 in a row to win.',
-    available: (state) => winSettings(state).length === 3,
+    name: '4 in a row', sentence: '4 in a row in any direction wins.',
+    available: (state) => winSettings(state).length === 5,
     settings: () => ({ length: 4, dirs: 'all' }),
   },
   {
     id: 'five', category: 'win',
     name: '5 in a row', sentence: 'You now need 5 in a row to win.',
-    // Never 5 in a row on a board smaller than 6x6.
-    available: (state) => winSettings(state).length === 4 && state.board.rows >= 6 && state.board.cols >= 6,
+    // The board grows to at least 6x6 (win length + 1), so never 5 on a smaller board.
+    available: (state) => winSettings(state).length === 4,
     settings: () => ({ length: 5, dirs: 'all' }),
   },
   {
@@ -123,7 +118,7 @@ export function getRule(id) {
 // The rules every match starts with.
 export function defaultRules() {
   return {
-    win: { ruleId: 'three', sinceTurn: 1, previous: null, settings: { length: 3, dirs: 'all' } },
+    win: { ruleId: 'four', sinceTurn: 1, previous: null, settings: { length: 4, dirs: 'all' } },
     placement: { ruleId: 'anywhere', sinceTurn: 1, previous: null },
     twist: { ruleId: 'noTwist', sinceTurn: 1, previous: null },
   };
@@ -182,6 +177,7 @@ export function activateRule(state, ruleId) {
   state.newestCategory = category;           // marks the new rule; Veto targets this
   state.lastRuleChangeTurn = state.playerTurns;
   state.stats.rulesChanged++;
+  state.roundRuleChanges = (state.roundRuleChanges || 0) + 1;
   afterRuleChange(state);
 }
 
@@ -409,7 +405,6 @@ export function affectedSquares(state, ruleId) {
   };
 
   switch (ruleId) {
-    case 'three':
     case 'four':
     case 'five':
       return exampleLine(0, 1);
@@ -451,7 +446,6 @@ export function winBanner(state) {
 //   N a line that does NOT count   L lava   v falls down   t a square you may use
 //   f a fading mark
 export const RULE_DIAGRAMS = {
-  three: ['....', 'xxx.', '.O..', 'O...'],
   four: ['....', 'xxxx', '.O..', 'O.O.'],
   five: ['.....', 'xxxxx', '.O.O.', '..O..'],
   noDiagonals: ['N...', '.N..', '..N.', 'xxx.'],

@@ -38,5 +38,13 @@ export function validateMatch(body) {
 
   if (!WINNERS.includes(body.winner)) return { error: 'winner must be player, otto or draw' };
 
-  return { match: { playerName, firstMove, cheatsUsed, cheatsCaught, powerupsUsed, winner: body.winner } };
+  // Optional: total player turns across all rounds, and the last board size like "6x7".
+  const turns = body.turns ?? null;
+  if (turns !== null && !(Number.isInteger(turns) && turns >= 0 && turns <= 1000)) return { error: 'turns must be a whole number 0-1000' };
+  const finalGrid = body.finalGrid ?? null;
+  if (finalGrid !== null && !(typeof finalGrid === 'string' && /^[3-9]x[3-9]$/.test(finalGrid))) {
+    return { error: 'finalGrid must look like 5x5' };
+  }
+
+  return { match: { playerName, firstMove, cheatsUsed, cheatsCaught, powerupsUsed, winner: body.winner, turns, finalGrid } };
 }

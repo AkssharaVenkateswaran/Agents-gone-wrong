@@ -1,5 +1,5 @@
 // agent.js
-// Otto's brain: picks normal moves, decides when to cheat, and tracks frustration.
+// Otto's brain: picks normal moves, decides when to cheat, and tracks its patience.
 // (The move-choosing and rule-choosing details live in ai.js.)
 
 import { pickRandom, cloneBoard } from './board.js';
@@ -59,7 +59,7 @@ export function pickCheat(state) {
     return null;
   }
 
-  if (state.stats.rulesChanged === 0) return null; // classic tic-tac-toe is played fair
+  if (!state.roundRuleChanges) return null;        // fair play until the round's first rule change
   if (state.ottoGrace) return null;              // no cheating right after a rule change
   if (state.turnNumber <= NO_CHEAT_TURNS) return null;
   if (state.turnNumber - state.lastCheatTry < CHEAT_GAP) return null;
@@ -87,12 +87,33 @@ export function pickCheat(state) {
   return null;
 }
 
-// Change frustration by `amount` (can be negative), kept between 0 and 100.
-// Returns true if this pushed Otto past 50 or 80 (so Otto can complain about it).
-export function addFrustration(state, amount) {
-  const before = state.frustration;
-  state.frustration = Math.max(0, Math.min(100, before + amount));
-  return [50, 80].some((level) => before < level && state.frustration >= level);
+// --- Otto's patience ------------------------------------------------------------------------
+// Patience (100 -> 0) only changes on round results. Its opposite, "frustration"
+// (0 -> 100), is what makes Otto sharper and cheat more (see ai.js and pickCheat).
+export const PATIENCE_LOST_ROUND = -35; // Otto loses a round
+export const PATIENCE_WON_ROUND = 10;   // Otto wins a round (never above 100)
+
+export function setPatience(state, patience) {
+  state.patience = Math.max(0, Math.min(100, Math.round(patience)));
+  state.frustration = 100 - state.patience;
+}
+
+// The 4 stages of Otto falling apart (0 Calm, 1 Irritated, 2 Unhinged, 3 Meltdown).
+export const STAGES = [
+  { min: 76, label: 'FINE' },
+  { min: 51, label: 'IRRITATED' },
+  { min: 26, label: 'UNHINGED' },
+  { min: 0, label: 'CRITICAL' },
+];
+export function stageOf(patience) {
+  return STAGES.findIndex((stage) => patience >= stage.min);
+}
+// How far into its stage Otto is: 0 at the top of the stage, 1 at the bottom.
+export function stageProgress(patience) {
+  const stage = stageOf(patience);
+  const top = stage === 0 ? 100 : STAGES[stage - 1].min - 1;
+  const bottom = STAGES[stage].min;
+  return top === bottom ? 0 : (top - patience) / (top - bottom);
 }
 
 // Count every cheat's cooldown down by one (called at the start of Otto's turn).
@@ -105,7 +126,8 @@ export function tickCooldowns(state) {
 // Which face Otto should pull: 'smug', 'bored', 'scheming' or 'furious'.
 export function ottoMood(state) {
   if (state.telegraph) return 'scheming';
-  if (state.frustration >= 70) return 'furious';
-  if (state.stats.rulesChanged > 0 && state.frustration < 35) return 'bored';
+  const stage = stageOf(state.patience);
+  if (stage >= 2) return 'furious';
+  if (stage === 1) return 'bored';
   return 'smug';
 }

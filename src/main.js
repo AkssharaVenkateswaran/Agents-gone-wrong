@@ -1,19 +1,31 @@
 // main.js
-// Boots the game and runs ONE long match:
+// Boots the game and runs a MATCH made of ROUNDS:
 //
-//   START of the player's turn:
-//        if it's time, the RULES CHANGE (a NEW_RULE.EXE pop-up; inputs locked),
-//        so the player always makes the first move under every new rule
-//   player's turn: click a square (following the current rules) or use power-ups
-//   -> Otto's turn: wait 400ms, "think" for 1.2-1.8s, maybe TELEGRAPH a cheat
-//        (the player can click Otto to catch it), then a normal move
-//   -> repeat until someone makes a line under the CURRENT win rule,
-//      or the FINAL RULE (most lines of 3) decides it at 9x9 / after 30 turns.
+//   each round:
+//     START of the player's turn: if it's time, the RULES CHANGE (a NEW_RULE.EXE
+//       pop-up; inputs locked) — only to a rule that can't cause an instant win
+//     player's turn: click a square (following the current rules) or use power-ups
+//     -> Otto's turn: wait 400ms, "think" for 1.2-1.8s, maybe TELEGRAPH a cheat
+//          (the player can click Otto to catch it), then a normal move
+//     -> until someone makes a line under the CURRENT win rule, or SUDDEN DEATH
+//        (most lines of 3) after 20 player turns
+//   after each round: Otto loses a round -35 patience, wins a round +10, draw 0.
+//   The player wins the match by draining Otto's patience to 0 (the RAMPAGE ending);
+//   Otto wins the match by winning 3 rounds first.
 
 import './styles.css';
-import { state, on, emit, resetMatch, MAX_TURNS } from './state.js';
+import { state, on, emit, resetMatch, startNextRound, ROUND_TURN_CAP, OTTO_ROUNDS_TO_WIN } from './state.js';
 import { emptyCells, addRow, addColumn, linesOf, LINE_LENGTH } from './board.js';
-import { chooseMove, pickCheat, commitCheat, addFrustration, tickCooldowns } from './agent.js';
+import {
+  chooseMove,
+  pickCheat,
+  commitCheat,
+  tickCooldowns,
+  setPatience,
+  stageOf,
+  PATIENCE_LOST_ROUND,
+  PATIENCE_WON_ROUND,
+} from './agent.js';
 import { getCheat } from './cheats.js';
 import { getPowerUp, canAfford } from './powerups.js';
 import { addPoints, POINTS, QUICK_COUNTER_TURNS, RULE_BONUS_TURNS } from './scoring.js';
@@ -22,7 +34,6 @@ import {
   RULE_EVERY,
   TIMER_SECONDS,
   getRule,
-  drawRules,
   landingSquare,
   whyIllegal,
   placeMove,
@@ -35,13 +46,30 @@ import {
   activateRule,
   currentTurn,
 } from './rules.js';
-import { ottoRewriteRules, findWinningSquare, winningSquares } from './ai.js';
-import { say, sayRule, sayFromMemory, sayCatchRate } from './dialogue.js';
+import {
+  ottoRewriteRules,
+  findWinningSquare,
+  winningSquares,
+  safeRuleIds,
+  expiryIsSafe,
+  pickSome,
+} from './ai.js';
+import { say, sayRule, sayFromMemory, sayCatchRate, shout, RAMPAGE_LINES } from './dialogue.js';
 import { fetchStats, saveMatch } from './memory.js';
 import { FIRST_MOVES, cleanName } from './matchLog.js';
-import { sfx, setMuted } from './sfx.js';
+import { sfx, setMuted, setDetune, startBuzz, stopBuzz } from './sfx.js';
 import { initRender, updateTurnTimer, ruleRowPosition } from './ui/render.js';
-import { showPopup, spinBoardEffect, popPoints } from './ui/effects.js';
+import {
+  showPopup,
+  spinBoardEffect,
+  popPoints,
+  initChaos,
+  tearBoard,
+  spawnFakePopups,
+  clearFakePopups,
+  setTabGone,
+  restoreTab,
+} from './ui/effects.js';
 
 const PLAYER_TO_OTTO_MS = 400;    // pause after the player's move before Otto starts thinking
 const THINK_MIN_MS = 1200;        // Otto "thinks" for 1.2-1.8 seconds before every move
@@ -50,6 +78,7 @@ const TELEGRAPH_MS = 1100;        // how long the player has to catch a cheat
 const RULE_AUTO_OK_MS = 4000;     // the NEW_RULE.EXE pop-up continues by itself after 4s
 const RULE_MINIMISE_MS = 600;     // the pop-up shrinks into the Rule Book
 const RULE_EXAMPLE_MS = 2000;     // a 2-second example of the new rule on the board
+const ROUND_END_AUTO_MS = 6000;   // the ROUND_END.EXE pop-up continues by itself after 6s
 const TURN_TIMER_MS = TIMER_SECONDS * 1000;
 
 // --- Timing ------------------------------------------------------------------
@@ -62,6 +91,7 @@ function pause(ms) {
 }
 
 const other = (mark) => (mark === 'X' ? 'O' : 'X');
+const stage = () => stageOf(state.patience);
 
 // Give the player points and show a "+N" pop.
 function earn(amount) {
@@ -69,18 +99,22 @@ function earn(amount) {
   popPoints(amount);
 }
 
-// Was a rule changed within the last 2 player turns? (For the +3 rule bonus.)
-function soonAfterRuleChange() {
-  return state.stats.rulesChanged > 0 && state.playerTurns - state.lastRuleChangeTurn < RULE_BONUS_TURNS;
+// Otto says something. From the Unhinged stage on, it sometimes SHOUTS.
+function talk(text) {
+  state.ottoSays = !state.calm && stage() >= 2 && Math.random() < 0.3 ? shout(text) : text;
 }
 
-// Has Otto started bending the rules yet? (Before the first rule change it plays fair.)
-const ottoUnleashed = () => state.stats.rulesChanged > 0;
+// Was a rule changed within the last 2 player turns? (For the +3 rule bonus.)
+function soonAfterRuleChange() {
+  return state.roundRuleChanges > 0 && state.playerTurns - state.lastRuleChangeTurn < RULE_BONUS_TURNS;
+}
 
 // --- Player's turn -----------------------------------------------------------
 
 function isPlayersTurn() {
-  return state.turn === 'X' && !state.matchOver && !state.ruleScene && state.screen === 'game';
+  return (
+    state.turn === 'X' && !state.roundOver && !state.matchOver && !state.ruleScene && state.screen === 'game'
+  );
 }
 
 // The player clicked (or pressed Enter on) a square.
@@ -105,7 +139,7 @@ function onCellClick(index) {
     putMark(state, index, 'X');
     sfx.place();
     earn(POINTS.placeX);
-    if (checkMatchEnd('X')) return;
+    if (checkRoundEnd('X')) return;
     setNotice('Free X placed! Now make your normal move.');
     return;
   }
@@ -119,7 +153,7 @@ function onCellClick(index) {
   }
 
   playerPlace(landing);
-  if (checkMatchEnd('X')) return;
+  if (checkRoundEnd('X')) return;
 
   // Double Mark: the player gets to place another X before Otto moves.
   if (state.extraMarks > 0) {
@@ -137,13 +171,19 @@ function setNotice(text) {
   emit('change');
 }
 
+// Which ninth of the board a square is in, named like the 3x3 squares (for Otto's memory).
+function regionName(index) {
+  const { rows, cols } = state.board;
+  const r = Math.min(2, Math.floor((Math.floor(index / cols) * 3) / rows));
+  const c = Math.min(2, Math.floor(((index % cols) * 3) / cols));
+  return FIRST_MOVES[r * 3 + c];
+}
+
 // Place the player's X (with Mirror etc.) and award points.
 function playerPlace(landing) {
   // Was Otto about to make a line here? (On Reverse day lines are bad, so no blocking.)
   const ottoThreat = isReverseDay(state) ? -1 : findWinningSquare(state, 'O');
-  if (!state.log.firstMove && state.board.rows === 3 && state.board.cols === 3) {
-    state.log.firstMove = FIRST_MOVES[landing]; // remembered by Otto's memory
-  }
+  if (!state.log.firstMove) state.log.firstMove = regionName(landing); // remembered by Otto's memory
   placeMove(state, landing, 'X');
   sfx.place();
   state.notice = '';
@@ -153,8 +193,7 @@ function playerPlace(landing) {
   if (landing === ottoThreat) {
     earn(POINTS.block);
     if (soonAfterRuleChange()) earn(POINTS.ruleBonus);
-    state.ottoSays = say('playerBlocks');
-    if (ottoUnleashed() && addFrustration(state, 5)) state.ottoSays = say('frustration');
+    talk(say('playerBlocks')); // (blocking doesn't change patience; only round results do)
   }
 }
 
@@ -163,6 +202,7 @@ function endPlayerTurn() {
   state.mode = null;
   state.extraMarks = 0;
   state.playerTurns++;
+  state.totalTurns++;
 
   // Lights Out wears off after a few player turns.
   if (state.lightsOut) {
@@ -176,11 +216,11 @@ function endPlayerTurn() {
   const faded = fadeOldMarks(state);
   if (faded > 0) state.notice = `${faded} old mark${faded > 1 ? 's' : ''} faded away.`;
 
-  // The longer the game drags on, the grumpier Otto gets.
-  if (ottoUnleashed() && addFrustration(state, 2)) state.ottoSays = say('frustration');
+  // At the Meltdown stage Otto gets desperate.
+  if (stage() === 3 && Math.random() < 0.25) talk(say('desperate'));
 
-  if (state.playerTurns >= MAX_TURNS) {
-    finalRule();
+  if (state.playerTurns >= ROUND_TURN_CAP) {
+    suddenDeath();
     return;
   }
 
@@ -194,21 +234,26 @@ async function startPlayerTurn() {
   state.turn = 'X';
   state.blinkCategory = null;
 
-  // Reverse day only lasts a few turns.
+  // Reverse day only lasts a few turns (but it waits a turn if ending now would
+  // let someone win instantly).
+  const twist = state.rules.twist;
+  if (twist.expiresAtTurn && currentTurn(state) >= twist.expiresAtTurn && !expiryIsSafe(state)) {
+    twist.expiresAtTurn++;
+  }
   if (expireRules(state)) {
-    state.ottoSays = say('ruleExpired');
+    talk(say('ruleExpired'));
     state.notice = 'Reverse day is over. Lines win again.';
   }
 
   if (state.playerTurns >= state.nextRuleAt) {
     if (!(await ruleChangeScene())) return;
-    if (checkMatchEnd(null)) return; // e.g. the board had to grow to 9x9
+    if (checkRoundEnd(null)) return; // e.g. the board is full
   } else if (state.nextRuleAt - state.playerTurns === 1) {
     // One turn of warning before the rules change.
-    state.ottoSays = state.stats.rulesChanged === 0 ? say('solved') : say('ruleTelegraph');
+    talk(state.stats.rulesChanged === 0 ? say('solved') : say('ruleTelegraph'));
   }
 
-  // Tutorial (first match only): point out where Otto is about to win.
+  // Tutorial (round 1 only): point out where Otto is about to win.
   state.threatCells = null;
   if (state.tutorial && !isReverseDay(state)) {
     const threats = winningSquares(state, 'O');
@@ -301,13 +346,13 @@ function activatePowerUp(id) {
     powerUp.apply(state);
     const restored = getRule(state.rules[category].ruleId);
     state.notice = `Vetoed "${getRule(vetoedId).name}". Back to "${restored.name}".`;
-    state.ottoSays = say('vetoed');
+    talk(say('vetoed'));
     showExample(restored.id);
     showPopup('VETOED!');
   } else if (id === 'amendment') {
     powerUp.apply(state);
     state.notice = 'Amendment ready: YOU pick the next rule when the rules change.';
-    state.ottoSays = say('amended');
+    talk(say('amended'));
   } else {
     powerUp.apply(state);
     state.notice = `${powerUp.name}! ${powerUp.help}`;
@@ -364,10 +409,9 @@ function afterPowerUp(powerUp) {
       earn(POINTS.quickCounter);
       delete state.cheatLandedAt[cheatId]; // only once per cheat
     }
-    if (powerUp.id !== 'veto') state.ottoSays = say('cheatCountered');
-    if (ottoUnleashed() && addFrustration(state, 8)) state.ottoSays = say('frustration');
+    if (powerUp.id !== 'veto') talk(say('cheatCountered'));
   }
-  if (checkMatchEnd('X')) return; // e.g. Glue Stick gave back a winning X
+  if (checkRoundEnd('X')) return; // e.g. Glue Stick gave back a winning X
   emit('change');
 }
 
@@ -385,12 +429,12 @@ function showExample(ruleId) {
   }, RULE_EXAMPLE_MS);
 }
 
-// The player pressed [ OK ] (or picked an Amendment card) on the pop-up.
-let resolveRuleScene = null;
+// The player pressed [ OK ] (or picked an Amendment card, or [NEXT ROUND]).
+let resolveClick = null;
 function onRuleOk(ruleId) {
-  if (resolveRuleScene) resolveRuleScene(ruleId);
+  if (resolveClick) resolveClick(ruleId);
 }
-const waitForClick = () => new Promise((resolve) => (resolveRuleScene = resolve));
+const waitForClick = () => new Promise((resolve) => (resolveClick = resolve));
 
 // The rule change, step by step (inputs are locked the whole time):
 //   1. the board dims and NEW_RULE.EXE pops up over the monitor
@@ -398,18 +442,27 @@ const waitForClick = () => new Promise((resolve) => (resolveRuleScene = resolve)
 //   3. the pop-up minimises into its row in RULES.TXT, which blinks twice
 //   4. a 2-second example of the rule on the board
 //   5. then it's the player's turn
+// Only rules that can't cause an instant win or loss are used; if there is none,
+// the change waits a turn ("NEW RULE DELAYED").
 // Returns false if the match was reset meanwhile.
 async function ruleChangeScene() {
+  const safe = safeRuleIds(state);
+  if (safe.length === 0) {
+    state.nextRuleAt = state.playerTurns + 1;
+    state.ruleDelayed = true;
+    return true;
+  }
   stopTurnTimer();
+  state.ruleDelayed = false;
   state.nextRuleAt = state.playerTurns + RULE_EVERY;
 
   let change;
-  if (state.amendmentPending && drawRules(state).length > 0) {
-    // Amendment: the player picks from 3 cards.
+  if (state.amendmentPending) {
+    // Amendment: the player picks from 3 (safe) cards.
     state.amendmentPending = false;
-    const cards = drawRules(state, 3);
+    const cards = pickSome(safe, 3);
     state.ruleScene = { phase: 'pick', cards };
-    state.ottoSays = say('amended');
+    talk(say('amended'));
     emit('change');
     sfx.rule();
     const ruleId = await waitForClick();
@@ -420,7 +473,7 @@ async function ruleChangeScene() {
   } else {
     const before = { ...state.rules };
     const picked = ottoRewriteRules(state);
-    if (!picked) return true; // no rule left to change
+    if (!picked) return true;
     change = { ...picked, oldId: before[getRule(picked.ruleId).category].ruleId };
     sfx.rule();
   }
@@ -428,7 +481,7 @@ async function ruleChangeScene() {
 
   // 1-2. Show the pop-up; wait for [ OK ] or 4 seconds.
   state.ruleScene = { phase: 'show', change };
-  state.ottoSays = sayRule(change.ruleId);
+  talk(sayRule(change.ruleId));
   state.notice = '';
   emit('change');
   const myGeneration = generation;
@@ -455,13 +508,14 @@ async function ruleChangeScene() {
 async function ottoTurn() {
   if (!(await pause(PLAYER_TO_OTTO_MS))) return;
   state.turnNumber++;
+  state.ottoTurnStartedAt = Date.now(); // the monitor nudges / shudders (see render.js)
   tickCooldowns(state);
   if (state.spinBlockedTurns > 0) state.spinBlockedTurns--;
 
   // Time Out makes Otto skip a turn.
   if (state.ottoSkipsNextTurn) {
     state.ottoSkipsNextTurn = false;
-    state.ottoSays = say('skipTurn');
+    talk(say('skipTurn'));
     emit('change');
     if (!(await pause(THINK_MIN_MS))) return;
     endOttoTurn();
@@ -474,14 +528,14 @@ async function ottoTurn() {
   if (!(await pause(THINK_MIN_MS + Math.random() * THINK_EXTRA_MS))) return;
   state.ottoThinking = false;
 
-  // A cheat (rarely: never early, at most 1 per 3 turns, never one that decides the match).
+  // A cheat (rarely: never early, at most 1 per 3 turns, never one that decides the round).
   const picked = pickCheat(state);
   if (picked) {
     const { cheat, trial } = picked;
     state.lastCheatTry = state.turnNumber;
     // Telegraph: Otto's screen flickers ">:)". The player can click Otto now.
     state.telegraph = cheat.id;
-    state.ottoSays = say(cheat.id === 'rewriteRules' ? 'ruleTelegraph' : 'telegraph');
+    talk(say(cheat.id === 'rewriteRules' ? 'ruleTelegraph' : 'telegraph'));
     // Sometimes Otto brags with a real stat: "Only 23% of humans catch my Mark Steal."
     const brag = sayCatchRate(state.memory.stats, cheat.id, cheat.name);
     if (brag && Math.random() < 0.4) state.ottoSays = brag;
@@ -491,7 +545,7 @@ async function ottoTurn() {
     if (state.telegraph === cheat.id) {
       state.telegraph = null;
       runCheat(cheat, trial);
-      if (state.matchOver) return;
+      if (state.roundOver) return;
       if (cheat.replacesMove) {
         endOttoTurn(); // the cheat already placed Otto's mark(s)
         return;
@@ -516,8 +570,7 @@ function catchCheat() {
   state.cooldowns[cheat.id] = cheat.cooldown; // a caught cheat still goes on cooldown
   state.stats.cheatsCaught++;
   state.log.cheatsCaught.push(cheat.id);
-  addFrustration(state, 10);
-  state.ottoSays = say('cheatCaught');
+  talk(say('cheatCaught')); // (catching doesn't change patience; only round results do)
   state.notice = `CAUGHT! Otto was about to use ${cheat.name}.`;
   earn(POINTS.catchCheat);
   emit('change');
@@ -534,12 +587,12 @@ function runCheat(cheat, trial) {
   if (cheat.id === 'boardSpin') state.spinsToUndo++;
   state.stats.cheatsUsed++;
   state.log.cheatsUsed.push(cheat.id);
-  state.ottoSays = say('cheatSucceeds');
+  talk(say('cheatSucceeds'));
   state.notice = `Otto cheated: ${cheat.name}! ${cheat.description}`;
   emit('change');
   sfx.cheat();
   if (cheat.id === 'boardSpin') spinBoardEffect();
-  checkMatchEnd('O');
+  checkRoundEnd('O');
 }
 
 function ottoNormalMove() {
@@ -549,7 +602,8 @@ function ottoNormalMove() {
     sfx.otto();
   }
   state.ottoGrace = false; // the grace turn is over
-  if (checkMatchEnd('O')) return;
+  if (checkRoundEnd('O')) return;
+  if (stage() === 3 && !state.calm) tearBoard(); // Meltdown: screen tearing on Otto's move
   endOttoTurn();
 }
 
@@ -558,103 +612,186 @@ function endOttoTurn() {
   startPlayerTurn();
 }
 
-// --- Win / board full / final rule -----------------------------------------------------
+// --- The end of a round ------------------------------------------------------------------
 
-// Check whether the match is over after `mover` ('X', 'O' or null) did something.
+// Check whether the round is over after `mover` ('X', 'O' or null) did something.
 // Returns true if it ended.
-function checkMatchEnd(mover) {
+function checkRoundEnd(mover) {
+  if (state.roundOver) return true;
   const lines = { X: lineFor(state, 'X'), O: lineFor(state, 'O') };
   if (lines.X || lines.O) {
     // The mover's own line counts first (a move can sometimes make lines for both).
     const maker = mover && lines[mover] ? mover : lines.X ? 'X' : 'O';
     // Reverse day: making a line LOSES.
     const winner = isReverseDay(state) ? other(maker) : maker;
-    endMatch(winner, lines[maker].line);
+    if (isReverseDay(state)) {
+      state.notice = `Reverse day! Making a line LOSES, so ${winner === 'X' ? 'you win' : 'Otto wins'} the round.`;
+    }
+    endRound(winner, lines[maker].line);
     return true;
   }
 
-  // At 9x9 the FINAL RULE decides.
-  if (state.board.rows >= MAX_BOARD && state.board.cols >= MAX_BOARD) {
-    finalRule();
-    return true;
-  }
-
-  // Board full: Otto is forced to add a row or column.
+  // Board full: Otto is forced to add a row or column (up to 7x7, then SUDDEN DEATH).
   if (emptyCells(state.board).length === 0) {
-    if (state.board.rows <= state.board.cols) addRow(state.board);
-    else addColumn(state.board);
-    state.ottoSays = say('outOfRoom');
-    state.notice = 'The board is full, so Otto had to add more board.';
-    addFrustration(state, 10);
     if (state.board.rows >= MAX_BOARD && state.board.cols >= MAX_BOARD) {
-      finalRule();
+      suddenDeath();
       return true;
     }
+    if (state.board.cols >= MAX_BOARD || (state.board.rows <= state.board.cols && state.board.rows < MAX_BOARD)) {
+      addRow(state.board);
+    } else {
+      addColumn(state.board);
+    }
+    talk(say('outOfRoom'));
+    state.notice = 'The board is full, so Otto had to add more board.';
   }
   return false;
 }
 
-// FINAL RULE: count every line of 3 (overlapping lines count too). Most lines wins.
-function finalRule() {
+// SUDDEN DEATH: count every line of 3 (overlapping lines count too). Most lines wins the round.
+function suddenDeath() {
   const xLines = linesOf(state.board, 'X', LINE_LENGTH);
   const oLines = linesOf(state.board, 'O', LINE_LENGTH);
-  state.finalRule = { x: xLines.length, o: oLines.length };
+  state.suddenDeath = { x: xLines.length, o: oLines.length };
   const winner = xLines.length > oLines.length ? 'X' : oLines.length > xLines.length ? 'O' : 'draw';
   const winnerLines = winner === 'X' ? xLines : winner === 'O' ? oLines : [...xLines, ...oLines];
-  state.notice = `FINAL RULE: most lines of 3 wins. You ${xLines.length} – ${oLines.length} Otto.`;
-  showPopup('FINAL RULE!');
-  endMatch(winner, [...new Set(winnerLines.flat())]);
-  state.ottoSays = say('finalRule');
-  emit('change');
+  state.notice = `SUDDEN DEATH: MOST LINES OF 3 WINS. You ${xLines.length} – ${oLines.length} Otto.`;
+  showPopup('SUDDEN DEATH!');
+  endRound(winner, [...new Set(winnerLines.flat())], say('suddenDeath'));
 }
 
-// The match is over. Then the ending plays:
-//   player wins: Otto's monitor crashes -> the table flips -> YOU WIN! banner
-//   Otto wins / draw: straight to the banner (Otto looks smug)
-async function endMatch(winner, line) {
+// A round is over: patience changes, then the next round, the rampage, or Otto's win.
+async function endRound(winner, line, ottoLine) {
   stopTurnTimer();
-  state.matchOver = true;
-  state.result = winner;
+  state.roundOver = true;
   state.winLine = line;
   state.telegraph = null;
   state.ottoThinking = false;
   state.mode = null;
   state.threatCells = null;
   state.lightsOut = null; // lights back on so the player can see the result
-  state.session.played++; // the next match is the next "match number"
 
+  const before = state.patience;
   if (winner === 'X') {
-    earn(POINTS.winMatch);
+    state.roundsWon.you++;
+    earn(POINTS.winRound);
     if (soonAfterRuleChange()) earn(POINTS.ruleBonus);
-    state.session.you++;
-    state.ottoSays = say('meltdown');
-  } else if (winner === 'O') {
-    state.session.otto++;
-    state.ottoSays = say('matchWon');
-  } else {
-    state.ottoSays = say('draw');
-  }
-  if (isReverseDay(state) && !state.finalRule) {
-    state.notice = `Reverse day! Making a line LOSES, so ${winner === 'X' ? 'you win' : 'Otto wins'}.`;
-  }
-  rememberMatch(winner);
-
-  if (winner === 'X') {
-    state.ending = 'crash';
-    emit('change');
-    sfx.lose(); // Otto's computer dying
-    if (!(await pause(1400))) return;
-    state.ending = 'flip';
-    emit('change');
-    if (!(await pause(900))) return;
+    setPatience(state, before + PATIENCE_LOST_ROUND);
+    talk(ottoLine || say('roundLost'));
     sfx.win();
+  } else if (winner === 'O') {
+    state.roundsWon.otto++;
+    setPatience(state, before + PATIENCE_WON_ROUND);
+    talk(ottoLine || say('roundWon'));
+    sfx.lose();
   } else {
-    emit('change');
-    if (!(await pause(1200))) return;
-    if (winner === 'O') sfx.lose();
+    talk(ottoLine || say('draw'));
   }
-  state.ending = 'banner';
+  updateStageEffects();
+  state.roundEnd = { winner, change: state.patience - before };
+
+  if (state.patience <= 0) {
+    // The player drained Otto's patience: the match is won. RAMPAGE!
+    state.matchOver = true;
+    state.result = 'X';
+    emit('change');
+    if (!(await pause(2200))) return;
+    startRampage();
+    return;
+  }
+  if (state.roundsWon.otto >= OTTO_ROUNDS_TO_WIN) {
+    // Otto won 3 rounds first: the smug ending.
+    state.matchOver = true;
+    state.result = 'O';
+    emit('change');
+    rememberMatch('O');
+    if (!(await pause(2200))) return;
+    state.ending = 'banner';
+    state.ottoSays = '...I cheated, obviously.';
+    emit('change');
+    return;
+  }
+
+  // Otherwise: [NEXT ROUND], or it continues by itself.
   emit('change');
+  const myGeneration = generation;
+  await Promise.race([waitForClick(), pause(ROUND_END_AUTO_MS)]);
+  if (myGeneration !== generation) return;
+  nextRound();
+}
+
+function nextRound() {
+  startNextRound();
+  // Each stage of Otto falling apart is announced once.
+  const now = stage();
+  if (now > state.announcedStage) {
+    state.announcedStage = now;
+    talk(say(`stage${now}`));
+  } else {
+    talk(say('roundStart', { round: state.roundNumber }));
+  }
+  emit('change');
+  startPlayerTurn();
+}
+
+// --- The rampage ending (patience reaches 0) ---------------------------------------------
+// About 12-15 seconds, skippable. The match is saved to Snowflake BEFORE it starts.
+let rampageSkipped = false;
+
+// Like pause(), but also stops if the player pressed [SKIP].
+async function rampagePause(ms) {
+  const stillHere = await pause(ms);
+  return stillHere && !rampageSkipped;
+}
+
+async function startRampage() {
+  const myGeneration = generation;
+  rampageSkipped = false;
+  stopBuzz();
+  await rememberMatch('X'); // saved first (gives up after a few seconds if offline)
+  if (myGeneration !== generation) return;
+
+  const step = async (phase, ms, line) => {
+    state.rampage = { phase };
+    if (line !== undefined) state.ottoSays = line;
+    emit('change');
+    if (phase === 'chaos') spawnFakePopups(6, 'OTTO.EXE HAS STOPPED CARING'); // pop-ups multiply
+    return rampagePause(ms);
+  };
+  const played =
+    (await step('red', 1300, 'PATIENCE.SYS NOT FOUND')) &&                 // 1. red monitor
+    (await step('fine', 1800, RAMPAGE_LINES.fine)) &&                       // 2. Otto snaps
+    (await step('chaos', 3000)) &&                                          // 3. everything flies
+    (await step('shatter', 1700)) &&                                        // 4. the glass shatters
+    (await step('crash', 1600)) &&                                          // 5. crash screen
+    (await step('goodbye', 1600, RAMPAGE_LINES.goodbye));                   // 6. goodbye
+  if (myGeneration !== generation || !played) return; // ([SKIP] goes straight to closeTheGame)
+  closeTheGame();
+}
+
+// 7. Try to close the tab. Browsers usually block window.close() for tabs the
+// player opened, so if the page is still here after 300ms, play the CRT-off fallback.
+async function closeTheGame() {
+  const myGeneration = generation;
+  clearFakePopups();
+  window.close();
+  if (!(await pause(300))) return;
+  state.rampage = { phase: 'crtOff' };   // the screen collapses into a line, then a dot
+  emit('change');
+  if (!(await pause(1300))) return;
+  state.rampage = { phase: 'black' };    // 3 seconds of black
+  setTabGone();
+  emit('change');
+  if (!(await pause(3000))) return;
+  if (myGeneration !== generation) return;
+  state.rampage = { phase: 'final' };    // "Otto closed the game..." + [REBOOT OTTO]
+  emit('change');
+}
+
+function skipRampage() {
+  if (!state.rampage || ['crtOff', 'black', 'final'].includes(state.rampage.phase)) return;
+  rampageSkipped = true;
+  closeTheGame();
 }
 
 // --- Otto's memory (Snowflake, through our API) ---------------------------------------
@@ -669,11 +806,11 @@ async function loadMemory() {
   state.memory = { status: stats ? 'ready' : 'offline', stats };
   const taunt = sayFromMemory(stats);
   // Only interrupt if the player hasn't started playing yet.
-  if (taunt && state.playerTurns === 0 && !state.matchOver) state.ottoSays = taunt;
+  if (taunt && state.totalTurns === 0 && !state.matchOver) state.ottoSays = taunt;
   emit('change');
 }
 
-// At the end of a match: save it, then reload the stats for the leaderboard.
+// At the end of a match: save ONE row for the match, then reload the stats for the leaderboard.
 async function rememberMatch(winner) {
   if (state.log.saved) return; // only once per match
   state.log.saved = true;
@@ -686,7 +823,9 @@ async function rememberMatch(winner) {
     cheatsUsed: state.log.cheatsUsed,
     cheatsCaught: state.log.cheatsCaught,
     powerupsUsed: state.log.powerupsUsed,
-    winner: winner === 'X' ? 'player' : winner === 'O' ? 'otto' : 'draw',
+    winner: winner === 'X' ? 'player' : 'otto',
+    turns: state.totalTurns,
+    finalGrid: `${state.board.rows}x${state.board.cols}`,
   });
   const stats = await fetchStats(state.playerName);
   if (myGeneration !== generation) return;
@@ -694,14 +833,28 @@ async function rememberMatch(winner) {
   emit('change');
 }
 
+// --- Stage effects that live outside the redraw -------------------------------------------
+// Sound detune and the low buzz follow Otto's stage (and Calm mode).
+function updateStageEffects() {
+  const now = state.calm ? 0 : stage();
+  setDetune([0, 12, 25, 40][now]);
+  if (now === 3 && state.screen === 'game' && !state.rampage) startBuzz();
+  else stopBuzz();
+}
+
 // --- Starting matches ------------------------------------------------------------------
 
 function playAgain() {
   generation++; // stops any unfinished sequences from the last match
   stopTurnTimer();
-  resolveRuleScene = null;
+  resolveClick = null;
+  rampageSkipped = false;
+  restoreTab();
+  clearFakePopups();
   resetMatch();
+  setPatience(state, 100);
   state.ottoSays = say('matchStart');
+  updateStageEffects();
   emit('change');
   loadMemory(); // runs in the background
 }
@@ -709,6 +862,7 @@ function playAgain() {
 // The title screen's Play button.
 const NAME_KEY = 'agents-gone-wrong:name';
 const MUTE_KEY = 'agents-gone-wrong:muted';
+const CALM_KEY = 'agents-gone-wrong:calm';
 
 function startGame(rawName) {
   state.playerName = cleanName(rawName) || 'Human';
@@ -722,6 +876,16 @@ function toggleMute() {
   state.muted = !state.muted;
   setMuted(state.muted);
   remember(MUTE_KEY, state.muted ? '1' : '');
+  updateStageEffects();
+  emit('change');
+}
+
+// Calm mode switches the "unhinged" chaos effects off.
+function toggleCalm() {
+  state.calm = !state.calm;
+  remember(CALM_KEY, state.calm ? '1' : '');
+  updateStageEffects();
+  if (state.calm) clearFakePopups();
   emit('change');
 }
 
@@ -743,24 +907,24 @@ function recall(key) {
 
 // --- Debug panel (open the game with ?debug in the URL) -----------------------
 function debugAction(action, value) {
-  if (state.ruleScene) return;
+  if (state.ruleScene && action !== 'rampage') return;
   state.debug.message = '';
 
   if (action === 'force') {
     state.debug.forceCheat = value;
     state.debug.message = `Otto will try ${getCheat(value).name} on its next turn.`;
   } else if (action === 'rule') {
-    // Switch on a specific rule right now (no pop-up).
-    if (state.matchOver || state.rules[getRule(value).category].ruleId === value) {
-      state.debug.message = `${getRule(value).name} is already active (or the match is over).`;
+    // Switch on a specific rule right now (no pop-up, no safety check).
+    if (state.roundOver || state.rules[getRule(value).category].ruleId === value) {
+      state.debug.message = `${getRule(value).name} is already active (or the round is over).`;
     } else {
       const oldId = state.rules[getRule(value).category].ruleId;
       activateRule(state, value);
       state.lastRuleChange = { ruleId: value, oldId, rejected: [], by: 'debug' };
-      state.ottoSays = sayRule(value);
+      talk(sayRule(value));
       showExample(value);
       startTurnTimer();
-      checkMatchEnd(null);
+      checkRoundEnd(null);
     }
   } else if (action === 'ruleNow') {
     state.nextRuleAt = state.playerTurns + 1; // changes at the start of your next turn
@@ -768,14 +932,36 @@ function debugAction(action, value) {
   } else if (action === 'grow') {
     if (state.board.rows < MAX_BOARD) addRow(state.board);
     if (state.board.cols < MAX_BOARD) addColumn(state.board);
-    checkMatchEnd(null);
-  } else if (action === 'turn29') {
-    state.playerTurns = Math.max(state.playerTurns, MAX_TURNS - 1);
-    state.debug.message = `It's now turn ${currentTurn(state)}. Your next move triggers the FINAL RULE.`;
-  } else if (action === 'frustration') {
-    addFrustration(state, 25);
-  } else if (action === 'calm') {
-    addFrustration(state, -100);
+    checkRoundEnd(null);
+  } else if (action === 'turn19') {
+    state.playerTurns = Math.max(state.playerTurns, ROUND_TURN_CAP - 1);
+    state.debug.message = 'Your next move triggers SUDDEN DEATH.';
+  } else if (action === 'patienceDown' || action === 'patienceOne') {
+    setPatience(state, action === 'patienceOne' ? 1 : Math.max(1, state.patience - 25));
+    const now = stage();
+    if (now > state.announcedStage) {
+      state.announcedStage = now;
+      talk(say(`stage${now}`));
+    }
+    updateStageEffects();
+    state.debug.message = `Patience is now ${state.patience}.`;
+  } else if (action === 'winRound' || action === 'loseRound') {
+    if (!state.roundOver && !state.matchOver) {
+      endRound(action === 'winRound' ? 'X' : 'O', []);
+      return;
+    }
+  } else if (action === 'rampage') {
+    if (!state.rampage) {
+      generation++; // stop whatever was going on
+      stopTurnTimer();
+      state.ruleScene = null;
+      setPatience(state, 0);
+      state.roundOver = true;
+      state.matchOver = true;
+      state.result = 'X';
+      startRampage();
+      return;
+    }
   } else if (action === 'points') {
     earn(10);
   } else if (action === 'cooldowns') {
@@ -795,12 +981,20 @@ initRender(document.getElementById('app'), {
   onRuleOk,
   onCancel: cancelMode,
   onMute: toggleMute,
+  onCalm: toggleCalm,
+  onSkip: skipRampage,
   onDebug: debugAction,
 });
+initChaos(() => ({
+  stage: stage(),
+  calm: state.calm,
+  active: state.screen === 'game' && !state.matchOver && !state.rampage,
+}));
 on('change', () => emit('render'));
 resetMatch();
 state.playerName = recall(NAME_KEY);
 state.muted = recall(MUTE_KEY) === '1';
+state.calm = recall(CALM_KEY) === '1';
 setMuted(state.muted);
 state.screen = 'title'; // ask for the player's name first
 emit('change');

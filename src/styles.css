@@ -47,7 +47,8 @@ html, body {
 }
 
 body {
-  background-color: var(--indigo);
+  background-color: var(--bg, var(--indigo));
+  transition: background-color 2s steps(8);
   background-image: var(--dither-indigo);
   background-size: 8px 8px;
   color: var(--cream);
@@ -87,7 +88,7 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
   position: absolute;
   bottom: -60px;
   opacity: 0.16;
-  animation: drift 48s linear infinite;
+  animation: drift var(--drift, 48s) linear infinite;
 }
 .floppy-drift { --px: 3; }
 .bit { color: var(--lime); font: 32px var(--text-font); }
@@ -159,7 +160,7 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
   text-shadow: 3px 3px 0 var(--pink);
 }
 .game-title.big { font-size: 20px; line-height: 1.6; text-align: center; }
-.score { font: 14px var(--pixel-font); color: var(--cream); }
+.score { font: 18px var(--pixel-font); color: var(--cream); }
 .score b { color: var(--yellow); font-weight: normal; }
 .topbar-right { display: flex; justify-content: flex-end; align-items: center; gap: 16px; }
 .memory-disk { position: relative; --px: 2; }
@@ -187,7 +188,7 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
 
 /* --- Left: TOOLBOX.EXE --- */
 .toolbox { display: flex; flex-direction: column; overflow: hidden; }
-.toolbox .window-body { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.toolbox .window-body { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .points { display: flex; align-items: center; gap: 8px; font: 16px var(--pixel-font); --px: 3; }
 .disks {
   --disk-px: 6;
@@ -195,6 +196,8 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   justify-items: center;
+  align-content: space-evenly;
+  flex: 1;
 }
 .disk {
   --px: var(--disk-px);
@@ -214,11 +217,12 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
   height: calc(6px * var(--disk-px));
   display: grid;
   place-items: center;
-  font: 18px/1 var(--text-font);
+  font: 18px/0.85 var(--text-font);
+  text-transform: uppercase;
+  text-align: center;
   color: var(--ink);
-  letter-spacing: -0.5px;
-  white-space: nowrap;
-  overflow: hidden;
+  hyphens: manual;      /* long names break at their soft hyphen, never cut off */
+  overflow-wrap: anywhere;
 }
 .disk-cost {
   position: absolute;
@@ -231,7 +235,6 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
   background: var(--yellow);
   border: 3px solid var(--ink);
 }
-.disk-key { position: absolute; left: 6px; top: 2px; font: 18px var(--text-font); color: var(--ink); opacity: 0.7; }
 .disk.greyed { filter: grayscale(1) brightness(0.75); opacity: 0.55; }
 .disk.active { outline: 3px dashed var(--yellow); outline-offset: 4px; }
 .disk.inserting { animation: insert 0.24s steps(3); }
@@ -267,6 +270,8 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
 .monitor {
   /* as big as fits: min(column width, column height - 140px) */
   width: min(100cqw, 100cqh - 140px);
+  transform: rotate(var(--tilt, 0deg)); /* Otto's stage tilts the monitor */
+  transition: transform 1.2s ease-out;
   aspect-ratio: 1;
   display: flex;
   flex-direction: column;
@@ -487,8 +492,9 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
 .patience-bar i.on { background: var(--lime); }
 .patience-bar.low i.on { background: var(--pink); }
 
-.rules { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.rules .window-body { overflow: auto; display: grid; gap: 4px; align-content: start; }
+.rules { position: relative; flex: none; display: flex; flex-direction: column; }
+.rules .window-body { display: grid; gap: 4px; align-content: start; }
+.history ul { max-height: 140px; overflow: auto; }
 .rule-row {
   position: relative;
   display: grid;
@@ -661,6 +667,105 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
   .disks { grid-template-columns: repeat(4, 1fr); }
 }
 
+/* ==========================================================================
+   Otto falling apart: stages 1-3 (body.stage-N), Calm mode, and the rampage
+   ========================================================================== */
+.icon-btn.on { outline: 3px solid var(--yellow); outline-offset: 2px; }
+.stage-label { font-weight: normal; color: var(--lime); }
+.stage-1 .stage-label { color: var(--yellow); }
+.stage-2 .stage-label, .stage-3 .stage-label { color: var(--pink); }
+
+/* The monitor's motion (the animation delay is set in render.js so it stays smooth). */
+@keyframes nudge { 0% { rotate: 0deg; } 15% { rotate: -2deg; } 100% { rotate: 0deg; } }
+@keyframes wobble { 50% { rotate: 1.2deg; } }
+@keyframes shudder { 0%, 100% { translate: 0 0; } 25% { translate: -4px 0; } 50% { translate: 4px 2px; } 75% { translate: -3px -2px; } }
+
+/* Stage 1+: new lines jitter a little in the bubble. */
+body:not(.calm):not(.stage-0) .bubble.jitter { animation: jitter 0.7s steps(7); }
+@keyframes jitter { 25% { translate: 1px 0; } 50% { translate: -1px 1px; } 75% { translate: 1px -1px; } }
+/* Static: a few drifting lines of pixel noise across the CRT. */
+.static-band {
+  position: fixed;
+  z-index: 6;
+  height: 24px;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6' shape-rendering='crispEdges'%3E%3Crect width='3' height='1' fill='%23F4EBD0'/%3E%3Crect x='5' y='2' width='2' height='1' fill='%23F4EBD0'/%3E%3Crect x='1' y='4' width='4' height='1' fill='%23F4EBD0'/%3E%3C/svg%3E");
+  background-size: 16px 12px;
+  animation: static-drift 1.5s linear forwards;
+}
+@keyframes static-drift { to { transform: translateY(var(--travel)); } }
+
+/* Stage 2+: cracks on the glass (semi-transparent, never hiding the marks). */
+.crack { position: absolute; z-index: 4; --px: 4; opacity: 0.55; pointer-events: none; translate: -50% -50%; }
+/* Windows shift a little off-grid and their title bars turn reddish. */
+body.stage-2:not(.calm) .toolbox, body.stage-3:not(.calm) .toolbox { translate: 3px -2px; }
+body.stage-2:not(.calm) .rules, body.stage-3:not(.calm) .rules { translate: -4px 3px; }
+body.stage-2:not(.calm) .title-bar, body.stage-3:not(.calm) .title-bar { background: #5a1b4f; }
+/* Fake "not responding" pop-ups (in empty space only). */
+.fake-popup { position: fixed; z-index: 35; width: 260px; }
+.fake-popup p { margin: 0 0 8px; font: 20px/1.1 var(--text-font); }
+.fake-buttons { display: flex; gap: 8px; justify-content: center; }
+.btn.small { padding: 4px 8px; font-size: 12px; }
+
+/* Stage 3: RGB-split headings, sparks around Otto, scribbles on the Rule Book. */
+body.stage-3:not(.calm) :is(.game-title, .win-banner, .title-bar) { text-shadow: -2px 0 0 var(--pink), 2px 0 0 var(--cyan); }
+.sparks { display: none; position: absolute; inset: 0; pointer-events: none; }
+body.stage-3:not(.calm) .sparks { display: block; }
+.sparks i { position: absolute; width: 6px; height: 6px; background: var(--yellow); box-shadow: 6px 6px 0 #ff9f43; animation: spark 1.4s steps(4) infinite; }
+.sparks i:nth-child(1) { left: -10px; top: 20%; }
+.sparks i:nth-child(2) { right: -10px; top: 35%; animation-delay: 0.35s; }
+.sparks i:nth-child(3) { left: 10%; top: -8px; animation-delay: 0.7s; }
+.sparks i:nth-child(4) { right: 15%; bottom: 10%; animation-delay: 1.05s; }
+@keyframes spark { 50% { translate: 4px -8px; opacity: 0.2; } }
+.rules-scribble { display: none; position: absolute; inset: 40px 0 0; width: 100%; height: calc(100% - 40px); pointer-events: none; z-index: 2; }
+.rules-scribble path { fill: none; stroke: var(--pink); stroke-width: 3; vector-effect: non-scaling-stroke; opacity: 0.6; }
+body.stage-3:not(.calm) .rules-scribble { display: block; }
+/* Meltdown: bands of the board slide sideways for a moment. */
+.tear-band { position: fixed; z-index: 7; pointer-events: none; display: grid; place-items: center; }
+
+/* --- Between rounds: ROUND_END.EXE --- */
+.popup-heading.good { color: #3d7a1f; }
+.popup-heading.bad { color: #b81e33; }
+
+/* --- The rampage ---------------------------------------------------------------------------- */
+.skip-btn { position: fixed; right: 16px; bottom: 56px; z-index: 60; }
+.otto-screen-text { position: absolute; left: calc(6px * var(--px)); top: calc(10px * var(--px)); width: calc(20px * var(--px)); height: calc(13px * var(--px));
+  display: grid; place-items: center; text-align: center; background: #b81e33; color: var(--cream); font: 14px/1 var(--text-font); }
+/* HUD letters fall down the screen. */
+.fall { display: inline-block; animation: fall 1.8s ease-in var(--d) forwards; }
+@keyframes fall { to { transform: translateY(110vh) rotate(var(--r)); } }
+/* Floppies fly out of TOOLBOX.EXE; RULES.TXT gets scribbled and slides off. */
+.rampage-chaos .disk { animation: fly-out 1.4s ease-in forwards; }
+@keyframes fly-out { to { transform: translate(var(--fx), var(--fy)) rotate(var(--fr)); opacity: 0; } }
+.rampage-chaos .rules-scribble { display: block; }
+.rampage-chaos .rules { animation: slide-off 2.2s ease-in 0.6s forwards; }
+@keyframes slide-off { to { transform: translateX(130%) rotate(8deg); } }
+:is(.rampage-shatter, .rampage-crash, .rampage-goodbye) :is(.disk, .rules) { visibility: hidden; }
+:is(.rampage-shatter, .rampage-crash, .rampage-goodbye) .topbar :is(.game-title, .score) { visibility: hidden; }
+/* The CRT glass shatters into pixel shards that fall off the bottom. */
+.rampage-shatter .board-area, .rampage-shatter .win-banner { visibility: hidden; }
+.shards { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+.shards i { position: absolute; width: 16.7%; height: 16.7%; background: var(--screen); border: 2px solid var(--cyan);
+  animation: shard 1.5s ease-in var(--d) forwards; }
+@keyframes shard { to { transform: translate(var(--x), 120vh) rotate(var(--r)); } }
+/* Crash screen, CRT turning off, black. */
+.crash-screen { position: fixed; inset: 0; z-index: 55; display: grid; align-content: center; justify-items: center; gap: 16px; padding: 24px;
+  background: var(--navy); color: var(--cream); }
+.crash-title { margin: 0; font: 20px/1.4 var(--pixel-font); text-align: center; }
+.crash-log { margin: 0; font: 22px/1.2 var(--text-font); color: var(--phosphor); }
+.crash-otto { margin: 0; font: 26px var(--text-font); color: var(--yellow); }
+.crt-off, .black-screen { position: fixed; inset: 0; z-index: 58; background: #000; display: grid; place-items: center; }
+.crt-off i { width: 100vw; height: 100vh; background: var(--cream); animation: crt-off 1.2s ease-in forwards; }
+@keyframes crt-off {
+  0% { transform: scale(1, 1); }
+  45% { transform: scale(1, 0.004); }
+  75% { transform: scale(0.004, 0.004); opacity: 1; }
+  100% { transform: scale(0.004, 0.004); opacity: 0; }
+}
+.black-screen.final .final-box { display: grid; gap: 16px; justify-items: center; max-width: 560px; padding: 16px; text-align: center;
+  color: var(--cream); font: 24px/1.2 var(--text-font); animation: fade-in 1.5s ease-out; }
+
 /* --- Reduced motion: nothing drifts, bounces, spins or flies. --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .drift, .dots i, .otto-face.think .f1, .otto-face.think .f2, .otto-face.flicker,
@@ -671,6 +776,10 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
   .disk:not(.greyed):hover, .rule-card:hover { transform: none; }
   .alert-popup { animation: fade-out 1.6s steps(1) forwards; }
   .confetti { display: none; }
-  .monitor.flip { opacity: 0.3; }
+  .monitor { animation: none !important; transition: none; }  /* static tilt only */
+  .bubble.jitter, .sparks i, .static-band, .fall, .rampage-chaos .disk, .rampage-chaos .rules, .shards i { animation: none !important; }
+  .crt-off i { animation: fade-out 1.2s steps(2) forwards; }
 }
+/* Calm mode: no tilt, wobble, cracks or chaos at all. */
+body.calm .monitor { transform: none; animation: none !important; }
 @keyframes fade-out { 90% { opacity: 1; } 100% { opacity: 0; } }

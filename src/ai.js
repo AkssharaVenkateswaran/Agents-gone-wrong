@@ -17,7 +17,8 @@ import {
   winSettings,
   winDirections,
   isReverseDay,
-  drawRules,
+  availableRules,
+  restorePrevious,
   activateRule,
   fadeOldMarks,
 } from './rules.js';
@@ -120,8 +121,8 @@ export function ottoMove(state) {
   }
 
   const skill = skillFor(state);
-  // Otto may not win before the first rule change, or on its grace turn right after one.
-  const mayWin = state.stats.rulesChanged > 0 && !state.ottoGrace;
+  // Otto may not win before the first rule change of the round, or on its grace turn right after one.
+  const mayWin = state.roundRuleChanges > 0 && !state.ottoGrace;
 
   // 1. Its own winning move (if it notices it).
   const wins = moves.filter((i) => makesLine(state, i, 'O'));
@@ -216,10 +217,54 @@ function ruleValueForOtto(state, ruleId) {
   return value + Math.random() * 2;          // a dash of chaos
 }
 
-// Otto draws 3 random rules and keeps the one that helps it most.
-// Returns { ruleId, rejected } or null if no rule can change.
+// --- Rule changes must never cause an instant win or loss ---------------------------------
+// A copy of the game whose rules we can change without touching the real one.
+function ruleTrial(state) {
+  return {
+    ...state,
+    board: cloneBoard(state.board),
+    rules: { ...state.rules },
+    ruleHistory: [...state.ruleHistory],
+    stats: { ...state.stats },
+  };
+}
+
+// Could either player win (make a line) with their very next move?
+function someoneWinsInOne(state) {
+  return findWinningSquare(state, 'X') !== -1 || findWinningSquare(state, 'O') !== -1;
+}
+
+// Is it safe to switch this rule on right now? (Tried on a copy first.)
+export function ruleIsSafe(state, ruleId) {
+  const trial = ruleTrial(state);
+  activateRule(trial, ruleId);
+  return !someoneWinsInOne(trial);
+}
+
+// All the rules that could be switched on right now without an instant win/loss.
+export function safeRuleIds(state) {
+  return availableRules(state).map((rule) => rule.id).filter((id) => ruleIsSafe(state, id));
+}
+
+// Is it safe for the current twist (Reverse day) to run out right now?
+export function expiryIsSafe(state) {
+  const trial = ruleTrial(state);
+  restorePrevious(trial, 'twist', 'expired');
+  return !someoneWinsInOne(trial);
+}
+
+// Up to `count` different random rules from `ids`.
+export function pickSome(ids, count) {
+  const pool = ids.slice();
+  const picked = [];
+  while (picked.length < count && pool.length > 0) picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  return picked;
+}
+
+// Otto draws 3 random SAFE rules and keeps the one that helps it most.
+// Returns { ruleId, rejected } or null if no rule can safely change (then the change is postponed).
 export function ottoRewriteRules(state) {
-  const drawn = drawRules(state, 3);
+  const drawn = pickSome(safeRuleIds(state), 3);
   if (drawn.length === 0) return null;
   const ruleId = highestBy(drawn, (id) => ruleValueForOtto(state, id));
   activateRule(state, ruleId);

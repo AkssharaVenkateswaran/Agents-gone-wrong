@@ -32,10 +32,19 @@ export const PALETTE = {
   C: '#2E9CC4', //   shade
   w: '#F4EBD0', // cream
   W: '#CFC3A0', //   shade
+  o: '#FF9F43', // orange (irritated)
+  O: '#C7701F', //   shade
+  r: '#FF3B4E', // red (furious)
+  R: '#B81E33', //   shade
+  v: '#B86BFF', // violet (unhinged)
+  V: '#7A3BC4', //   shade
+  e: '#9A95B5', // grey-blue (defeated / crashed)
+  E: '#6E698C', //   shade
+  h: '#FFFFFF', // white highlight
 };
 
 // Which colours get a darker shade on their bottom/right edge.
-const SHADE_OF = { u: 'U', n: 'N', m: 'M', p: 'P', l: 'L', y: 'Y', c: 'C', w: 'W' };
+const SHADE_OF = { u: 'U', n: 'N', m: 'M', p: 'P', l: 'L', y: 'Y', c: 'C', w: 'W', o: 'O', r: 'R', v: 'V', e: 'E' };
 
 // Add the outline and the bottom/right shade (the sprite grows by 1px on each side).
 export function outlined(rows) {
@@ -316,7 +325,6 @@ function digit(n) {
 }
 
 export const RULE_ICONS = {
-  three: digit(3),
   four: digit(4),
   five: digit(5),
   noDiagonals: icon((g) => {
@@ -463,3 +471,57 @@ export const CURSOR_HAND = [
   '....kwwwwwk..',
   '....kkkkkkk..',
 ];
+
+// --- Cracks in the CRT glass (Otto's Unhinged and Meltdown stages) -----------------------------
+// A jagged crack made of 1-pixel white lines that branch out from a point.
+// `seed` makes each crack different but the same every time it's drawn.
+export function crackSprite(seed, size = 40) {
+  let s = seed * 7919 + 13;
+  const random = () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+  const g = blank(size, size);
+  const branch = (x, y, angle, length) => {
+    for (let n = 0; n < length; n++) {
+      angle += (random() - 0.5) * 0.9;           // jagged: the direction keeps changing
+      x += Math.cos(angle);
+      y += Math.sin(angle);
+      plot(g, Math.round(x), Math.round(y), 'h');
+      if (random() < 0.08 && length > 6) branch(x, y, angle + (random() < 0.5 ? 1 : -1), length / 2);
+    }
+  };
+  const centre = size / 2;
+  for (let k = 0; k < 5; k++) branch(centre, centre, (k / 5) * Math.PI * 2 + random(), size * 0.45);
+  return toRows(g);
+}
+
+// Calm mode toggle: a little moon.
+export const MOON_SPRITE = outlined([
+  '..yyyy..',
+  '.yyy....',
+  'yyy.....',
+  'yyy.....',
+  'yyy.....',
+  'yyy.....',
+  '.yyy....',
+  '..yyyy..',
+]);
+
+// A scribbly line from (x1,y1) to (x2,y2) as an SVG path "d" (for scribbles over the
+// Rule Book). `seed` keeps it the same on every redraw.
+export function wobblyLine(x1, y1, x2, y2, seed, wobble = 3, segments = 5) {
+  let s = seed * 7919 + 7;
+  const random = () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+  let d = `M${x1},${y1}`;
+  for (let i = 1; i <= segments; i++) {
+    const t = i / segments;
+    const x = x1 + (x2 - x1) * t + (random() * 2 - 1) * wobble;
+    const y = y1 + (y2 - y1) * t + (random() * 2 - 1) * wobble;
+    d += ` L${x.toFixed(1)},${y.toFixed(1)}`;
+  }
+  return d;
+}

@@ -1,5 +1,5 @@
 // api/match.js  —  POST /api/match
-// Saves a finished match into the GAME_LOGS table.
+// Saves a finished match (one row per match, not per round) into the GAME_LOGS table.
 // Runs as a Vercel serverless function (export default handler(req, res)).
 
 import { randomUUID } from 'node:crypto';
@@ -9,8 +9,9 @@ import { validateMatch } from './_lib/validate.js';
 // INSERT ... SELECT (not VALUES) so we can turn JSON text into ARRAY columns.
 const INSERT_MATCH = `
   INSERT INTO GAME_LOGS
-    (match_id, player_name, first_move, cheats_used, cheats_caught, powerups_used, winner)
-  SELECT ?, ?, NULLIF(?, ''), PARSE_JSON(?)::ARRAY, PARSE_JSON(?)::ARRAY, PARSE_JSON(?)::ARRAY, ?`;
+    (match_id, player_name, first_move, cheats_used, cheats_caught, powerups_used, winner, turns, final_grid)
+  SELECT ?, ?, NULLIF(?, ''), PARSE_JSON(?)::ARRAY, PARSE_JSON(?)::ARRAY, PARSE_JSON(?)::ARRAY, ?,
+         TRY_TO_NUMBER(NULLIF(?, '')), NULLIF(?, '')`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -31,6 +32,8 @@ export default async function handler(req, res) {
       JSON.stringify(match.cheatsCaught),
       JSON.stringify(match.powerupsUsed),
       match.winner,
+      match.turns ?? '',
+      match.finalGrid ?? '',
     ]);
   } catch (err) {
     console.error('Saving match failed:', err.message);

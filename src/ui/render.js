@@ -8,10 +8,10 @@
 //   centre:   turn indicator, the big CRT monitor (win banner + board), message line
 //   right:    Otto's little CRT, his speech bubble, patience bar, RULES.TXT
 
-import { state, on, MAX_TURNS } from '../state.js';
+import { state, on, ROUND_TURN_CAP, OTTO_ROUNDS_TO_WIN } from '../state.js';
 import { CHEATS, MAX_GRID_SIZE } from '../cheats.js';
 import { POWERUPS, canAfford } from '../powerups.js';
-import { ottoMood } from '../agent.js';
+import { ottoMood, stageOf, stageProgress, STAGES } from '../agent.js';
 import {
   RULES,
   CATEGORIES,
@@ -43,17 +43,22 @@ import {
   RULE_ICONS,
   CURSOR_ARROW,
   CURSOR_HAND,
+  PALETTE,
+  MOON_SPRITE,
+  crackSprite,
+  wobblyLine,
 } from './sprites.js';
 
-// Short names that fit on a floppy disk label, and each disk's colour.
-const DISK_LABELS = {
-  flick: 'FLICK', lightSwitch: 'LIGHTS', eraser: 'ERASER', paperweight: 'WEIGHT',
-  glueStick: 'GLUE', timeOut: 'TIME OUT', myOwnLine: 'MY LINE', doubleMark: '2X MARK',
-  veto: 'VETO', amendment: 'AMEND',
+// The full power-up name on each floppy's label (soft hyphens let long words wrap
+// onto 2 lines instead of being cut off), and each disk's own palette colour.
+const DISK_NAMES = {
+  flick: 'Flick', lightSwitch: 'Light Switch', eraser: 'Eraser', paperweight: 'Paper\u00ADweight',
+  glueStick: 'Glue Stick', timeOut: 'Time Out', myOwnLine: 'My Own Line', doubleMark: 'Double Mark',
+  veto: 'Veto', amendment: 'Amend\u00ADment',
 };
 const DISK_COLOURS = {
   flick: 'c', lightSwitch: 'y', eraser: 'p', paperweight: 'm', glueStick: 'l',
-  timeOut: 'u', myOwnLine: 'n', doubleMark: 'w', veto: 'p', amendment: 'c',
+  timeOut: 'u', myOwnLine: 'n', doubleMark: 'w', veto: 'o', amendment: 'v',
 };
 const CATEGORY_LABELS = { win: 'WIN', placement: 'PLACE', twist: 'TWIST' };
 
@@ -79,6 +84,8 @@ export function initRender(rootElement, callbacks) {
     if (t.closest('#otto')) handlers.onCatch();
     if (t.closest('#play-again')) handlers.onPlayAgain();
     if (t.closest('#mute')) handlers.onMute();
+    if (t.closest('#calm')) handlers.onCalm();
+    if (t.closest('#skip')) handlers.onSkip();
     const disk = t.closest('[data-powerup]');
     if (disk) {
       insertingDisk = disk.dataset.powerup;
@@ -216,6 +223,7 @@ function render() {
   focusIndex = Math.min(focusIndex, state.board.cells.length - 1);
   const boardHadFocus = !!document.activeElement?.closest?.('[data-cell]');
 
+  applyStage();
   root.innerHTML = `
     ${renderTopBar()}
     <div class="main">
@@ -227,6 +235,7 @@ function render() {
       </aside>
     </div>
     ${state.ending === 'banner' ? renderEnding() : ''}
+    ${renderRampage()}
     ${state.debug.enabled ? renderDebug() : ''}
   `;
   insertingDisk = null;
@@ -236,8 +245,53 @@ function render() {
   afterRender();
 }
 
+// --- Otto's stage: how unhinged the whole screen looks ------------------------------------------
+// Body classes (stage-0..3, calm, rampage-<phase>) and a few CSS variables that
+// change gradually with patience inside each stage.
+const INDIGO = [0x2b, 0x1b, 0x5a];
+const WARM = [0x4a, 0x1b, 0x4f]; // purple-red
+
+function applyStage() {
+  const body = document.body;
+  const stage = state.screen === 'game' ? stageOf(state.patience) : 0;
+  const t = stageProgress(state.patience); // 0..1 through the current stage
+  for (let n = 0; n < 4; n++) body.classList.toggle(`stage-${n}`, stage === n);
+  body.classList.toggle('calm', state.calm);
+  for (const cls of [...body.classList]) if (cls.startsWith('rampage')) body.classList.remove(cls);
+  if (state.rampage) body.classList.add('rampage', `rampage-${state.rampage.phase}`);
+
+  const chaos = state.calm ? 0 : stage;
+  // The monitor's resting tilt: none, none, 3-5 degrees, 6-8 degrees.
+  const tilt = [0, 0, 3 + 2 * t, 6 + 2 * t][chaos];
+  body.style.setProperty('--tilt', `${-tilt}deg`);
+  // The background warms towards purple-red from the Unhinged stage on.
+  const warmth = chaos >= 2 ? Math.min(1, (50 - state.patience) / 50 + 0.2) : 0;
+  const mix = INDIGO.map((c, i) => Math.round(c + (WARM[i] - c) * warmth));
+  body.style.setProperty('--bg', `rgb(${mix.join(',')})`);
+  // Background floppies drift faster when Otto is upset.
+  body.style.setProperty('--drift', `${[48, 40, 26, 18][chaos]}s`);
+}
+
+// A one-off animation that survives redraws: start it "elapsed" ms in.
+function since(startedAt, durationMs) {
+  const elapsed = Date.now() - startedAt;
+  return elapsed >= 0 && elapsed < durationMs ? elapsed : null;
+}
+
 // Things that need the real sizes of elements on screen.
 function afterRender() {
+  // 0. Floppies as big as fits, so TOOLBOX.EXE has no empty space.
+  const disks = root.querySelector('.disks');
+  if (disks) {
+    const body = disks.parentElement;
+    const points = body.querySelector('.points');
+    const rows = Math.ceil(POWERUPS.length / 2);
+    const freeHeight = body.clientHeight - points.offsetHeight - 16 - (rows - 1) * 8 - 16;
+    const fitHigh = Math.floor(freeHeight / rows / 14);
+    const fitWide = Math.floor((disks.clientWidth - 16) / 2 / 16);
+    const px = Math.max(4, Math.min(10, fitHigh, fitWide));
+    disks.style.setProperty('--disk-px', px);
+  }
   // 1. Marks are pixel sprites scaled by a WHOLE number to fit the squares.
   const board = root.querySelector('.board');
   const cell = root.querySelector('.cell');
@@ -311,14 +365,18 @@ function renderTopBar() {
   }[memory];
   return `
     <header class="topbar">
-      <h1 class="game-title">AGENTS GONE WRONG</h1>
-      <div class="score" aria-label="Matches won: you ${state.session.you}, Otto ${state.session.otto}">
-        YOU <b>${state.session.you}</b> – <b>${state.session.otto}</b> OTTO
+      <h1 class="game-title">${fallingText('AGENTS GONE WRONG')}</h1>
+      <div class="score" aria-label="Round ${state.roundNumber}. Rounds won: you ${state.roundsWon.you}, Otto ${state.roundsWon.otto}">
+        ${fallingText(`ROUND ${state.roundNumber} · YOU ${state.roundsWon.you} – ${state.roundsWon.otto} OTTO`)}
       </div>
       <div class="topbar-right">
         <span class="memory-disk ${memory}" title="${memoryText}" role="img" aria-label="${memoryText}">
           ${sprite(floppy('n'))}<span class="memory-light"></span>
         </span>
+        <button id="calm" class="icon-btn ${state.calm ? 'on' : ''}" aria-pressed="${state.calm}"
+                aria-label="Calm mode: ${state.calm ? 'on' : 'off'} (turns the chaos effects off)" title="Calm mode (no chaos effects)">
+          ${sprite(MOON_SPRITE)}
+        </button>
         <button id="mute" class="icon-btn" aria-label="${state.muted ? 'Turn sound on' : 'Mute sound'}" aria-pressed="${state.muted}">
           ${sprite(state.muted ? SPEAKER_OFF : SPEAKER_ON)}
         </button>
@@ -328,8 +386,7 @@ function renderTopBar() {
 
 // --- Left: TOOLBOX.EXE -----------------------------------------------------------------------
 function renderToolbox() {
-  const yourTurn = state.turn === 'X' && !state.matchOver && !state.ruleScene;
-  const disks = POWERUPS.map((p) => {
+  const disks = POWERUPS.map((p, n) => {
     const affordable = canAfford(state, p);
     const useful = p.canUse(state);
     const active =
@@ -337,20 +394,22 @@ function renderToolbox() {
       (state.mode?.type?.startsWith('ownLine') && p.id === 'myOwnLine') ||
       (state.extraMarks > 0 && p.id === 'doubleMark') ||
       (state.amendmentPending && p.id === 'amendment');
-    const greyed = !yourTurn || !affordable || !useful;
+    // Greyed only when you can't afford it or it would do nothing (the tooltip says which).
+    const greyed = !affordable || !useful;
     let why = '';
-    if (!affordable) why = ' Not enough points.';
+    if (!affordable) why = ` Not enough points (costs ${p.cost}).`;
     else if (!useful) why = ' Nothing to use it on right now.';
+    // During the rampage the disks fly out in all directions.
+    const fly = `--fx:${((n * 37) % 11) - 5}00px;--fy:${((n * 53) % 9) - 6}00px;--fr:${((n * 71) % 7) * 90 - 270}deg`;
     return `
       <button class="disk ${greyed ? 'greyed' : ''} ${active ? 'active' : ''} ${insertingDisk === p.id ? 'inserting' : ''}"
-              data-powerup="${p.id}"
+              data-powerup="${p.id}" style="${fly}"
               aria-label="${p.name}, costs ${p.cost} points. ${p.help}${why} Shortcut key ${p.key}."
-              title="${p.name}: ${p.help}"
+              title="${p.name} (key ${p.key}, ${p.cost} pts): ${p.help}${why}"
               ${greyed ? 'aria-disabled="true"' : ''}>
         ${sprite(floppy(DISK_COLOURS[p.id]))}
-        <span class="disk-label">${DISK_LABELS[p.id]}</span>
+        <span class="disk-label">${DISK_NAMES[p.id]}</span>
         <span class="disk-cost">${p.cost}</span>
-        <span class="disk-key" aria-hidden="true">${p.key}</span>
       </button>`;
   }).join('');
 
@@ -372,6 +431,8 @@ function renderCentre() {
   let tone = 'otto';
   if (state.matchOver) {
     indicator = '&gt; GAME OVER';
+  } else if (state.roundOver) {
+    indicator = '&gt; ROUND OVER';
   } else if (state.ruleScene) {
     indicator = '&gt; NEW RULE...';
   } else if (state.turn === 'X') {
@@ -390,14 +451,31 @@ function renderCentre() {
 
   const { rows, cols } = state.board;
   const classes = ['monitor'];
-  if (state.ruleScene) classes.push('dimmed');
-  if (state.ending === 'flip') classes.push('flip');
+  if (state.ruleScene || state.roundEnd) classes.push('dimmed');
+
+  // The monitor's motion (kept continuous across redraws, see since()):
+  //   Irritated: a 1-2 degree nudge that settles on each Otto turn
+  //   Unhinged:  a gentle wobble       Meltdown: a shudder on each Otto turn
+  const stage = state.calm ? 0 : stageOf(state.patience);
+  let motion = '';
+  const turnAnim = since(state.ottoTurnStartedAt, stage === 1 ? 2400 : 700);
+  if (stage === 1 && turnAnim !== null) motion = `animation: nudge 2.4s ease-out ${-turnAnim}ms both;`;
+  if (stage === 2) motion = `animation: wobble 4s ease-in-out ${-(Date.now() % 4000)}ms infinite;`;
+  if (stage === 3 && turnAnim !== null) motion = `animation: shudder 0.7s steps(7) ${-turnAnim}ms both;`;
+
+  // Cracks in the glass: 1 when Unhinged, 3 at Meltdown (never hiding the marks).
+  const crackCount = state.calm ? 0 : [0, 0, 1, 3][stage];
+  const crackSpots = [[62, 18, 3], [14, 58, 11], [70, 70, 23]];
+  const cracks = crackSpots
+    .slice(0, crackCount)
+    .map(([x, y, seed]) => `<span class="crack" style="left:${x}%;top:${y}%">${sprite(crackSprite(seed))}</span>`)
+    .join('');
 
   return `
     <section class="centre">
       <p class="turn-indicator ${tone}" role="status" aria-live="polite">${indicator}${timer}</p>
       <div class="monitor-area">
-        <div class="${classes.join(' ')}">
+        <div class="${classes.join(' ')}" style="${motion}">
           <div class="casing">
             <div class="screen">
               <div class="win-banner">${winBanner(state)}</div>
@@ -405,6 +483,8 @@ function renderCentre() {
                 <div class="board" role="grid" aria-label="Board, ${rows} by ${cols}"
                      style="--cols:${cols};--rows:${rows}">${renderCells()}</div>
               </div>
+              ${cracks}
+              ${renderShards()}
               ${renderPopups()}
             </div>
             <span class="power-led" aria-hidden="true"></span>
@@ -422,7 +502,7 @@ let previousBoard = null;
 
 function renderCells() {
   const { rows, cols, cells, minions, stolen, glued } = state.board;
-  const locked = state.turn !== 'X' || state.matchOver || !!state.ruleScene;
+  const locked = state.turn !== 'X' || state.roundOver || state.matchOver || !!state.ruleScene;
   const targetCells = state.mode?.type === 'ownLinePlace' ? state.mode.cells : null;
   const placement = state.rules.placement.ruleId;
   const fading = state.rules.twist.ruleId === 'fade';
@@ -498,6 +578,7 @@ function ruleIcon(ruleId) {
 
 // Pop-up windows over the monitor: NEW_RULE.EXE, AMEND.EXE and MYLINE.EXE.
 function renderPopups() {
+  if (state.roundEnd && !state.rampage) return renderRoundEnd();
   const scene = state.ruleScene;
   if (scene?.phase === 'pick') {
     const cards = scene.cards.map((id) => {
@@ -560,8 +641,19 @@ function renderPopups() {
 }
 
 // --- Right: Otto ---------------------------------------------------------------------------
+// Irritated or worse: Otto's new lines jitter for a moment as they appear.
+let lastSays = '';
+let saysAt = 0;
+function bubbleJitter() {
+  if (state.ottoSays !== lastSays) {
+    lastSays = state.ottoSays;
+    saysAt = Date.now();
+  }
+  return since(saysAt, 700) !== null ? 'jitter' : '';
+}
+
 function ottoFace() {
-  if (state.ending && state.result === 'X') return 'crash'; // meltdown
+  if (state.rampage) return 'crash';
   if (state.telegraph) return 'scheming';
   if (state.matchOver && state.result === 'O') return 'smug';
   return ottoMood(state);
@@ -577,7 +669,8 @@ function renderOtto() {
   const bubble = thinking
     ? '<span class="dots" aria-label="Otto is thinking"><i></i><i></i><i></i></span>'
     : escapeHtml(state.ottoSays);
-  const patience = 100 - state.frustration;
+  const patience = state.patience;
+  const stageLabel = STAGES[stageOf(patience)].label;
   const segments = 20;
   const full = Math.round((patience / 100) * segments);
   const bar = Array.from({ length: segments }, (_, n) => `<i class="${n < full ? 'on' : ''}"></i>`).join('');
@@ -585,12 +678,13 @@ function renderOtto() {
   return `
     <section class="otto-area">
       <button id="otto" class="otto" aria-label="Otto (${faceName}). Click it, or press C, while it's scheming to catch a cheat.">
-        ${sprite(OTTO_CASING, 'otto-casing')}
-        ${face}
+        ${state.rampage ? sprite(OTTO_CASING, 'otto-casing', { ...PALETTE, m: '#FF3B4E', M: '#B81E33' }) : sprite(OTTO_CASING, 'otto-casing')}
+        ${state.rampage ? '<span class="otto-screen-text">PATIENCE.SYS<br>NOT FOUND</span>' : face}
+        <span class="sparks" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
       </button>
-      <div class="bubble" role="status" aria-live="polite">${bubble}</div>
+      <div class="bubble ${bubbleJitter()}" role="status" aria-live="polite">${bubble}</div>
       <div class="patience">
-        <span id="patience-label">OTTO'S PATIENCE</span>
+        <span id="patience-label">OTTO'S PATIENCE: <b class="stage-label">${stageLabel}</b></span>
         <div class="patience-bar ${patience < 30 ? 'low' : ''}" role="progressbar" aria-labelledby="patience-label"
              aria-valuemin="0" aria-valuemax="100" aria-valuenow="${patience}">${bar}</div>
       </div>
@@ -621,51 +715,130 @@ function renderRules() {
   }).join('');
 
   const until = Math.max(0, state.nextRuleAt - state.playerTurns);
-  const countdown = state.matchOver
+  const countdown = state.matchOver || state.roundOver
     ? 'NO MORE RULES'
-    : until === 0
-      ? 'NEW RULE NOW'
-      : until === 1
-        ? 'NEW RULE NEXT TURN'
-        : `NEW RULE IN ${until} TURNS`;
+    : state.ruleDelayed
+      ? 'NEW RULE DELAYED'
+      : until === 0
+        ? 'NEW RULE NOW'
+        : until === 1
+          ? 'NEW RULE NEXT TURN'
+          : `NEW RULE IN ${until} TURNS`;
   const history = state.ruleHistory
     .map((record) => `<li><s>${getRule(record.entry.ruleId).name}</s> <small>turns ${record.entry.sinceTurn}–${record.endedTurn}, ${record.how}</small></li>`)
     .join('');
 
   return `
     <section class="rules window" aria-label="Rules">
+      <svg class="rules-scribble" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <path d="${wobblyLine(5, 20, 95, 30, 7, 6, 6)} ${wobblyLine(8, 60, 92, 45, 9, 6, 6)} ${wobblyLine(10, 85, 90, 80, 13, 6, 6)}" />
+      </svg>
       ${titleBar('RULES.TXT')}
       <div class="window-body">
         ${rowsHtml}
         <p class="countdown">${sprite(HOURGLASS)} ${countdown}${state.amendmentPending ? ' (YOU PICK)' : ''}</p>
-        <p class="turn-count">TURN ${Math.min(now, MAX_TURNS)}/${MAX_TURNS}</p>
+        <p class="turn-count">TURN ${Math.min(now, ROUND_TURN_CAP)}/${ROUND_TURN_CAP} · SUDDEN DEATH AT ${ROUND_TURN_CAP}</p>
         ${history ? `<details class="history"><summary>HISTORY (${state.ruleHistory.length})</summary><ul>${history}</ul></details>` : ''}
       </div>
     </section>`;
 }
 
-// --- The ending: a full-screen pixel banner --------------------------------------------------
-function renderEnding() {
-  const result = state.result;
-  const headline = result === 'X' ? 'YOU WIN!' : result === 'O' ? 'OTTO WINS' : 'DRAW';
-  const confetti =
-    result === 'X'
-      ? `<div class="confetti" aria-hidden="true">${Array.from({ length: 24 }, (_, n) => `<i style="left:${(n * 41) % 100}%;animation-delay:${(n % 6) * 0.15}s"></i>`).join('')}</div>`
-      : '';
-  const otto = result === 'O'
-    ? `<div class="ending-otto">${sprite(OTTO_CASING, 'otto-casing')}<span class="otto-face">${sprite(OTTO_FACES.smug)}</span></div>`
-    : '';
+// --- Text whose letters fall down the screen during the rampage -----------------------------
+function fallingText(text) {
+  const falling = state.rampage && !['red', 'fine'].includes(state.rampage.phase);
+  if (!falling) return text;
+  return [...text]
+    .map((ch, n) => `<span class="fall" style="--d:${(n * 37) % 600}ms;--r:${((n * 53) % 9) * 20 - 80}deg">${ch === ' ' ? '&nbsp;' : ch}</span>`)
+    .join('');
+}
+
+// --- Between rounds: ROUND_END.EXE --------------------------------------------------------
+function renderRoundEnd() {
+  const { winner, change } = state.roundEnd;
+  const headline =
+    winner === 'X' ? `ROUND ${state.roundNumber}: YOU WIN!` : winner === 'O' ? `ROUND ${state.roundNumber}: OTTO WINS` : `ROUND ${state.roundNumber}: DRAW`;
+  const patienceLine = change < 0 ? `OTTO'S PATIENCE ${change}` : change > 0 ? `OTTO'S PATIENCE +${change}` : "OTTO'S PATIENCE: NO CHANGE";
+  const more = state.matchOver
+    ? ''
+    : `<button class="btn" data-rule-ok>[ NEXT ROUND ]</button>`;
   return `
-    <div class="ending ${result === 'X' ? 'won' : result === 'O' ? 'lost' : 'draw'}" role="dialog" aria-label="${headline}">
-      ${confetti}
+    <div class="rule-popup-stack show round-end">
+      <div class="window rule-popup" role="dialog" aria-label="${headline}">
+        ${titleBar('ROUND_END.EXE')}
+        <div class="window-body">
+          <p class="popup-heading ${winner === 'X' ? 'good' : winner === 'O' ? 'bad' : ''}">${headline}</p>
+          ${state.suddenDeath ? `<p class="rule-line">SUDDEN DEATH: lines of 3, you ${state.suddenDeath.x} – ${state.suddenDeath.o} Otto</p>` : ''}
+          <p class="rule-line">${patienceLine} (now ${state.patience})</p>
+          <p class="rule-line">ROUNDS: YOU ${state.roundsWon.you} – ${state.roundsWon.otto} OTTO (Otto needs ${OTTO_ROUNDS_TO_WIN})</p>
+          ${more}
+        </div>
+      </div>
+    </div>`;
+}
+
+// --- The rampage: the CRT glass shatters into pixel shards that fall off -------------------
+function renderShards() {
+  if (!state.rampage || state.rampage.phase !== 'shatter') return '';
+  const shards = [];
+  for (let r = 0; r < 6; r++) {
+    for (let c = 0; c < 6; c++) {
+      const n = r * 6 + c;
+      shards.push(`<i style="left:${c * 16.66}%;top:${r * 16.66}%;--d:${((n * 47) % 9) * 90}ms;--x:${((n * 31) % 7) * 20 - 60}px;--r:${((n * 13) % 9) * 30 - 120}deg"></i>`);
+    }
+  }
+  return `<div class="shards" aria-hidden="true">${shards.join('')}</div>`;
+}
+
+// The rampage's full-screen parts: the crash screen, CRT-off, black, and the last message.
+function renderRampage() {
+  const phase = state.rampage?.phase;
+  if (!phase) return '';
+  const skip =
+    ['red', 'fine', 'chaos', 'shatter', 'crash', 'goodbye'].includes(phase)
+      ? '<button id="skip" class="btn small skip-btn">[SKIP]</button>'
+      : '';
+  if (phase === 'crash' || phase === 'goodbye') {
+    return `
+      <div class="crash-screen" role="alert">
+        <p class="crash-title">FATAL ERROR: OTTO HAS LEFT THE GAME</p>
+        <pre class="crash-log">
+&gt; patience.sys ........ NOT FOUND
+&gt; rules.txt .......... SCRIBBLED
+&gt; toolbox.exe ........ EMPTY
+&gt; crt_glass .......... SHATTERED
+&gt; otto.exe ........... has stopped caring
+&gt; core dumped (it was mostly sulking)</pre>
+        ${phase === 'goodbye' ? `<p class="crash-otto">OTTO: ${escapeHtml(state.ottoSays)}</p>` : ''}
+      </div>${skip}`;
+  }
+  if (phase === 'crtOff') return '<div class="crt-off" aria-hidden="true"><i></i></div>';
+  if (phase === 'black') return '<div class="black-screen" aria-hidden="true"></div>';
+  if (phase === 'final') {
+    return `
+      <div class="black-screen final" role="dialog" aria-label="Otto closed the game">
+        <div class="final-box">
+          <p>Otto closed the game. You drained his patience in ${state.roundNumber} rounds.</p>
+          <button id="play-again" class="btn">[REBOOT OTTO]</button>
+          ${state.memory.stats ? renderLeaderboard() : ''}
+        </div>
+      </div>`;
+  }
+  return skip;
+}
+
+// --- Otto wins the match: a smug full-screen pixel banner -------------------------------------
+function renderEnding() {
+  return `
+    <div class="ending lost" role="dialog" aria-label="Otto wins">
       <div class="window ending-window">
         ${titleBar('RESULT.EXE')}
         <div class="window-body">
-          <p class="headline">${headline}</p>
-          ${otto}
-          ${state.finalRule ? `<p class="ending-line">FINAL RULE: you ${state.finalRule.x} – ${state.finalRule.o} Otto (lines of 3)</p>` : ''}
+          <p class="headline">OTTO WINS</p>
+          <div class="ending-otto">${sprite(OTTO_CASING, 'otto-casing')}<span class="otto-face">${sprite(OTTO_FACES.smug)}</span></div>
+          <p class="ending-line">OTTO: ...I cheated, obviously.</p>
+          <p class="ending-line">Otto won ${state.roundsWon.otto} rounds before you could drain its patience (${state.patience} left).</p>
           ${renderLeaderboard()}
-          <button id="play-again" class="btn">PLAY AGAIN</button>
+          <button id="play-again" class="btn">[PLAY AGAIN]</button>
         </div>
       </div>
     </div>`;
@@ -702,17 +875,20 @@ function renderDebug() {
       <summary>DEBUG.EXE</summary>
       <div class="debug-body">
         <div class="debug-row">
+          <button class="debug-btn" data-debug="patienceDown">Patience −25</button>
+          <button class="debug-btn" data-debug="patienceOne">Patience → 1</button>
+          <button class="debug-btn" data-debug="rampage">Trigger rampage</button>
+          <button class="debug-btn" data-debug="winRound">You win this round</button>
+          <button class="debug-btn" data-debug="loseRound">Otto wins this round</button>
           <button class="debug-btn" data-debug="ruleNow">Rules change next turn</button>
           <button class="debug-btn" data-debug="grow">Grow board +1</button>
-          <button class="debug-btn" data-debug="turn29">Jump to turn 30</button>
+          <button class="debug-btn" data-debug="turn19">Jump to turn 20</button>
           <button class="debug-btn" data-debug="points">+10 points</button>
-          <button class="debug-btn" data-debug="frustration">Frustration +25</button>
-          <button class="debug-btn" data-debug="calm">Frustration 0</button>
           <button class="debug-btn" data-debug="cooldowns">Clear cooldowns</button>
         </div>
         Rule now: <div class="debug-row">${ruleButtons}</div>
         Otto's next cheat: <div class="debug-row">${cheatButtons}</div>
-        <div>Turn ${currentTurn(state)} · ${state.board.rows}×${state.board.cols} · frustration ${state.frustration}</div>
+        <div>Round ${state.roundNumber} · turn ${currentTurn(state)} · ${state.board.rows}×${state.board.cols} · patience ${state.patience}</div>
         ${state.debug.message ? `<div><b>${state.debug.message}</b></div>` : ''}
       </div>
     </details>`;

@@ -149,9 +149,66 @@ export const lines = {
   ],
 };
 
+// --- Rounds, stages and the rampage ---
+Object.assign(lines, {
+  roundStart: [
+    "New round. New board. Same outcome.",
+    "Round {round}. I've been practising.",
+    "Fresh board! Let's ruin it together.",
+    "Round {round}. Try not to cry.",
+    "Reset complete. My patience? Not so much.",
+  ],
+  suddenDeath: [
+    "Enough! SUDDEN DEATH: most lines of 3 wins!",
+    "This round is taking forever. SUDDEN DEATH!",
+    "Time's up! Count the lines of 3!",
+    "SUDDEN DEATH. I've always wanted to say that.",
+    "No more turns! Most lines of 3 takes it!",
+  ],
+  // Said once when Otto reaches each stage of falling apart.
+  stage1: [
+    "I'm fine. Totally fine. Why do you ask?",
+    "Ha. Ha. Very funny. I'm not annoyed.",
+    "My patience module is... slightly dented.",
+    "Okay. Okay! I'm just a LITTLE irritated.",
+    "Breathe in. Breathe out. Robots don't breathe. Ugh.",
+  ],
+  stage2: [
+    "Something's cracking. Is it the screen? Is it ME?",
+    "THE RULES ARE WRONG. ALL OF THEM.",
+    "I can hear my fans screaming. Is that normal?",
+    "Unhinged? Me? I'm perfectly hinged!",
+    "Who keeps winning? YOU keep winning. STOP IT.",
+  ],
+  stage3: [
+    "CRITICAL. CRITICAL! Everything is CRITICAL!",
+    "One more round and I swear I'll... I'll...!",
+    "MY SCREEN IS CRACKING AND IT'S YOUR FAULT.",
+    "Patience at critical levels. Do NOT push me.",
+    "I am THIS close to closing the whole game.",
+  ],
+  desperate: [ // random remarks at the Meltdown stage
+    "Please. Just lose ONE more round. For me?",
+    "Why won't the numbers obey?! WHY?!",
+    "I'm not crying, my screen is leaking pixels.",
+    "I can't lose to a human. I CAN'T.",
+    "Error error error error error error.",
+  ],
+});
+
+// The rampage ending (exact lines).
+export const RAMPAGE_LINES = {
+  fine: 'FINE. FINE! YOU WANT TO WIN? HAVE YOUR STUPID GAME.',
+  goodbye: "I'm closing this. Goodbye, human.",
+};
+
+// Sometimes, when Otto is Unhinged or worse, it SHOUTS.
+export function shout(text) {
+  return text.toUpperCase();
+}
+
 // What Otto says when each rule comes in (by rule id).
 export const ruleLines = {
-  three: ["Back to 3 in a row. Classic. Boring. Classic.", "3 in a row again. Nostalgic, isn't it?"],
   four: ["4 in a row now. Your 3 is worthless.", "3 was too easy. Four. FOUR!"],
   five: ["5 in a row now. Good luck.", "Five. In. A. Row. I'll wait."],
   noDiagonals: ["Diagonals don't count anymore. Sorry, slanty lines.", "Straight lines only. Diagonals are cancelled."],
@@ -234,8 +291,9 @@ export function sayRule(ruleId) {
   return options[Math.floor(Math.random() * options.length)];
 }
 
-// Pick a random line for a situation.
-export function say(situation) {
+// Pick a random line for a situation, filling in {placeholders} from `values`.
+export function say(situation, values = {}) {
   const options = lines[situation] || [''];
-  return options[Math.floor(Math.random() * options.length)];
+  const line = options[Math.floor(Math.random() * options.length)];
+  return line.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? ''));
 }
