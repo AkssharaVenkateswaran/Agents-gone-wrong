@@ -61,7 +61,7 @@ import { fetchStats, saveMatch, fetchTactics } from './memory.js';
 import { cheatReasoning, ruleReasoning } from './tactics.js';
 import { termLog, cellName, panicLine, scanResult } from './terminal.js';
 import { FIRST_MOVES, cleanName } from './matchLog.js';
-import { sfx, setMuted, setDetune, startBuzz, stopBuzz } from './sfx.js';
+import { sfx, setMuted, setDetune, startBuzz, stopBuzz, staticNoise } from './sfx.js';
 import {
   startMusic,
   setStage as setMusicStage,
@@ -77,6 +77,7 @@ import { performMove, performCheat, performTelegraph, performRuleRewrite, perfor
 import { initOttoCursor, setCursorPatience, slap, park } from './ui/ottoCursor.js';
 import { initSwarm, clearSwarm, spawnMinion } from './ui/swarm.js';
 import { initGlitch, glitchBurst } from './ui/glitch.js';
+import { initTv, tvInterference } from './ui/tv.js';
 import {
   showPopup,
   spinBoardEffect,
@@ -540,6 +541,7 @@ async function ruleChangeScene() {
   // 1-2. Show the pop-up; wait for [ OK ] or 4 seconds.
   noteRules();
   musicEvent('ruleChange'); // record scratch, then bass only while the pop-up is open
+  tvBurst('rule'); // the background fizzes while NEW_RULE.EXE pops up
   state.ruleScene = { phase: 'show', change };
   talk(sayRule(change.ruleId));
   state.notice = '';
@@ -677,6 +679,11 @@ function cheatCommand(cheat, trial) {
     default:
       return [`cheat.${cheat.id}`, 'done.'];
   }
+}
+
+// 2000s TV interference on the background (see ui/tv.js).
+function tvBurst(kind) {
+  tvInterference(kind, state.calm ? 0 : stage(), state.calm);
 }
 
 // Cosmetic interface sabotage by Otto's cursor (stage 2+, not in Calm mode).
@@ -827,6 +834,7 @@ async function runCheat(cheat, trial) {
   emit('change');
   sfx.cheat();
   musicEvent('cheat');
+  tvBurst('cheat'); // the background loses signal
   if (cheat.id === 'boardSpin') spinBoardEffect();
   checkRoundEnd('O');
   return true;
@@ -1314,6 +1322,7 @@ initRender(document.getElementById('app'), {
   onDebug: debugAction,
 });
 initOttoCursor();
+initTv(staticNoise);
 initGlitch(() => ({
   patience: state.patience,
   calm: state.calm,

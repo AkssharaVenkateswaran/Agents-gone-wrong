@@ -86,3 +86,29 @@ export function stopBuzz() {
   }
   buzz = null;
 }
+
+// --- Quiet TV static (the 2000s TV interference) -------------------------------------------
+export function staticNoise(ms, volume = 0.02) {
+  if (muted) return;
+  try {
+    getAudio();
+    const length = Math.floor((audio.sampleRate * ms) / 1000);
+    const buffer = audio.createBuffer(1, length, audio.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+    const source = audio.createBufferSource();
+    const filter = audio.createBiquadFilter();
+    const gain = audio.createGain();
+    source.buffer = buffer;
+    filter.type = 'bandpass';
+    filter.frequency.value = 3000; // hissy, not harsh
+    const start = audio.currentTime;
+    gain.gain.setValueAtTime(volume, start);
+    gain.gain.setValueAtTime(volume, start + (ms / 1000) * 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + ms / 1000);
+    source.connect(filter).connect(gain).connect(audio.destination);
+    source.start(start);
+  } catch {
+    // no sound available
+  }
+}
