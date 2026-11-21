@@ -1,14 +1,14 @@
 // scoring.js
 // How the player earns points. Points are spent on power-ups.
 
-export const STARTING_POINTS = 6;
+export const STARTING_POINTS = 4;
 
 export const POINTS = {
-  placeX: 2,        // +2 for each X placed
-  block: 3,         // +3 for blocking a row where Otto had two in a row
+  placeX: 1,        // +1 for each X placed
+  block: 2,         // +2 for blocking a row where Otto had two in a row
   quickCounter: 2,  // +2 for countering a cheat within 2 turns of it happening
-  catchCheat: 4,    // +4 for catching a cheat during its telegraph window
-  winRound: 5,      // +5 for winning a round
+  catchCheat: 3,    // +3 for catching a cheat during its telegraph window
+  winRound: 4,      // +4 for winning a round
   ruleBonus: 3,     // +3 for winning or blocking within 2 turns of a rule change
 };
 

@@ -90,10 +90,10 @@ export const POWERUPS = [
     cost: 5,
     key: '6',
     counters: 'doubleMove',
-    help: 'Otto skips its next turn.',
-    canUse: (state) => !state.ottoSkipsNextTurn,
+    help: 'Otto skips its next 2 turns.',
+    canUse: (state) => !state.ottoSkipTurns,
     apply(state) {
-      getCheat('doubleMove').undo(state); // sets ottoSkipsNextTurn
+      getCheat('doubleMove').undo(state); // Otto skips its next 2 turns
     },
   },
   {
@@ -102,13 +102,13 @@ export const POWERUPS = [
     cost: 5,
     key: '7',
     counters: null,
-    help: 'Draw your own extra row or column and place a free X in it.',
+    help: 'Draw your own extra row or column and place your X in it (that X is your move).',
     canUse: (state) => state.board.rows < MAX_GRID_SIZE || state.board.cols < MAX_GRID_SIZE,
     apply(state, type) {
       const board = state.board;
       const index = type === 'row' ? addRow(board) : addColumn(board);
       state.addedLines.push({ owner: 'X', type, index });
-      // Now the player picks which square of the new line gets the free X.
+      // Now the player picks which square of the new line gets their X (their move).
       state.mode = { type: 'ownLinePlace', cells: lineCells(board, type, index) };
     },
   },
@@ -118,7 +118,7 @@ export const POWERUPS = [
     cost: 6,
     key: '8',
     counters: null,
-    help: 'Place two X marks this turn.',
+    help: 'Place two X marks: that is your whole turn.',
     canUse: (state) => state.extraMarks === 0,
     apply(state) {
       state.extraMarks = 1; // one extra X after the normal one

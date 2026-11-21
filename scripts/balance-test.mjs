@@ -10,7 +10,8 @@
 // The player bot:
 //   - wins if it can, otherwise blocks Otto if it can,
 //   - otherwise picks a random square next to existing marks,
-//   - uses a power-up whenever it counters a cheat that is active right now.
+//   - if it has no win and no block to make, it uses a power-up that counters a
+//     cheat active right now (at most one; a power-up USES THE TURN, like in the game).
 //   (It never clicks Otto to catch a cheat, so real players have it a bit easier.)
 
 import { freshMatchState, freshRoundState, ROUND_TURN_CAP, OTTO_ROUNDS_TO_WIN } from '../src/state.js';
@@ -20,6 +21,7 @@ import {
   commitCheat,
   tickCooldowns,
   setPatience,
+  changePatience,
   PATIENCE_LOST_ROUND,
   PATIENCE_WON_ROUND,
   PATIENCE_DRAW,
@@ -108,15 +110,23 @@ function use(s, id, choice) {
   return true;
 }
 
-// Counter every cheat that is active right now (if the bot can afford it).
-function counterCheats(s) {
-  if (s.lightsOut) use(s, 'lightSwitch');
-  if (s.addedLines.some((line) => line.owner === 'O')) use(s, 'eraser');
-  if (s.board.stolen.some(Boolean)) use(s, 'glueStick');
-  if (s.spinsToUndo > 0) use(s, 'paperweight');
-  if (s.cheatLandedAt.doubleMove === s.turnNumber) use(s, 'timeOut');
-  if (s.cheatLandedAt.rewriteRules === s.turnNumber) use(s, 'veto');
-  s.board.minions.forEach((minion, i) => minion && use(s, 'flick', i));
+// Counter ONE cheat that is active right now (if the bot can afford it).
+// Returns true if it used a power-up (which uses its whole turn).
+function counterCheat(s) {
+  if (s.lightsOut && use(s, 'lightSwitch')) return true;
+  if (s.addedLines.some((line) => line.owner === 'O') && use(s, 'eraser')) return true;
+  if (s.board.stolen.some(Boolean) && use(s, 'glueStick')) return true;
+  if (s.spinsToUndo > 0 && use(s, 'paperweight')) return true;
+  if (s.cheatLandedAt.doubleMove === s.turnNumber && use(s, 'timeOut')) return true;
+  if (s.cheatLandedAt.rewriteRules === s.turnNumber && use(s, 'veto')) return true;
+  const minion = s.board.minions.findIndex(Boolean);
+  return minion >= 0 && use(s, 'flick', minion);
+}
+
+// Does the bot have something better to do than a power-up (a win or a block)?
+function urgentMove(s) {
+  if (isReverseDay(s)) return false;
+  return winningSquares(s, 'X').length > 0 || winningSquares(s, 'O').length > 0;
 }
 
 function botMove(s) {
@@ -147,18 +157,22 @@ function playRound(s) {
       if (end) return end;
     }
 
-    // The player's turn.
-    counterCheats(s);
-    let end = checkEnd(s, 'X');
-    if (end) return end;
-    const landing = botMove(s);
-    if (landing !== undefined) {
-      if (!isReverseDay(s) && winningSquares(s, 'O').includes(landing)) s.points += POINTS.block;
-      placeMove(s, landing, 'X');
-      s.points += POINTS.placeX;
+    // The player's turn: a power-up (which uses the turn) or a move.
+    let end;
+    if (!urgentMove(s) && counterCheat(s)) {
+      s.stats.powerUpsUsed = (s.stats.powerUpsUsed || 0) + 1;
+      end = checkEnd(s, 'X'); // e.g. Glue Stick gave back a winning X
+      if (end) return end;
+    } else {
+      const landing = botMove(s);
+      if (landing !== undefined) {
+        if (!isReverseDay(s) && winningSquares(s, 'O').includes(landing)) s.points += POINTS.block;
+        placeMove(s, landing, 'X');
+        s.points += POINTS.placeX;
+      }
+      end = checkEnd(s, 'X');
+      if (end) return end;
     }
-    end = checkEnd(s, 'X');
-    if (end) return end;
     s.playerTurns++;
     s.totalTurns++;
     if (s.lightsOut && --s.lightsOut.turnsLeft <= 0) s.lightsOut = null;
@@ -169,8 +183,8 @@ function playRound(s) {
     s.turnNumber++;
     tickCooldowns(s);
     if (s.spinBlockedTurns > 0) s.spinBlockedTurns--;
-    if (s.ottoSkipsNextTurn) {
-      s.ottoSkipsNextTurn = false;
+    if (s.ottoSkipTurns > 0) {
+      s.ottoSkipTurns--;
       continue;
     }
     const picked = pickCheat(s);
@@ -213,12 +227,13 @@ function playMatch() {
     const result = playRound(s);
     if (result === 'X') {
       s.roundsWon.you++;
-      setPatience(s, s.patience + PATIENCE_LOST_ROUND);
+      s.points += POINTS.winRound;
+      changePatience(s, PATIENCE_LOST_ROUND, { roundEnd: true });
     } else if (result === 'O') {
       s.roundsWon.otto++;
-      setPatience(s, s.patience + PATIENCE_WON_ROUND);
+      changePatience(s, PATIENCE_WON_ROUND, { roundEnd: true });
     } else {
-      setPatience(s, s.patience + PATIENCE_DRAW);
+      changePatience(s, PATIENCE_DRAW, { roundEnd: true });
     }
     if (s.patience <= 0) return { winner: 'X', rounds: s.roundNumber };
     if (s.roundsWon.otto >= OTTO_ROUNDS_TO_WIN) return { winner: 'O', rounds: s.roundNumber };
@@ -243,16 +258,19 @@ for (const band of [{ label: '100-76', patience: 88 }, { label: '75-51', patienc
 }
 
 const matches = { X: 0, O: 0, draw: 0 };
+let earlyRampages = 0; // matches where patience hit 0 before round 3 ended (must be 0)
 const roundsWhenPlayerWins = {};
 let totalRounds = 0;
 for (let n = 0; n < COUNT; n++) {
   const { winner, rounds } = playMatch();
   matches[winner]++;
+  if (winner === 'X' && rounds < 3) earlyRampages++;
   totalRounds += rounds;
   if (winner === 'X') roundsWhenPlayerWins[rounds] = (roundsWhenPlayerWins[rounds] || 0) + 1;
 }
 console.log(`\nFull matches (${COUNT}): player wins ${pct(matches.X, COUNT)}, Otto wins ${pct(matches.O, COUNT)}` +
   `${matches.draw ? `, unfinished ${pct(matches.draw, COUNT)}` : ''}; average ${(totalRounds / COUNT).toFixed(1)} rounds per match`);
+console.log(`Rampages before the end of round 3: ${earlyRampages}`);
 console.log('When the player wins, the match took:');
 for (const rounds of Object.keys(roundsWhenPlayerWins).sort((a, b) => a - b)) {
   console.log(`  ${rounds} rounds: ${pct(roundsWhenPlayerWins[rounds], matches.X)}`);

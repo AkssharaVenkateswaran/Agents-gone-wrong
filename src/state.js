@@ -109,7 +109,7 @@ export function freshRoundState(roundNumber) {
     lastCheatTry: -99,     // Otto turn of the last cheat attempt (max 1 cheat per 3 Otto turns)
     lightsOut: null,       // { turnsLeft } while the lights are off
     addedLines: [],        // rows/cols added by Extra Line / My Own Line: { owner, type, index }
-    ottoSkipsNextTurn: false, // set by Time Out
+    ottoSkipTurns: 0,        // Otto turns still to skip (Time Out: 2)
     spinBlockedTurns: 0,   // Board Spin is blocked while this is above 0 (Paperweight)
     cheatLandedAt: {},     // cheat id -> Otto turn it landed on (for the quick-counter bonus)
     spinsToUndo: 0,        // Board Spins that haven't been undone yet (Paperweight)

@@ -8,12 +8,13 @@ Keep the retro pixel-art style, Snowflake memory, power-ups and cheats working. 
 - **Otto's Patience** starts at **100** and is the main goal: the player wins the match by draining it to **0**.
 - The match is made of **rounds**. After each round the board resets; patience, points and power-ups carry over.
 - Patience changes on these events only (use these exact numbers, in patience points out of 100):
-  - Otto **loses** a round (player wins): **−50**
-  - Draw: **−15**
-  - The player **catches** a cheat: **−5** (if this drains the last patience mid-round, the match is won)
-  - Otto **wins** a round: **+5** (never above 100)
+  - Otto **loses** a round (player wins): **−30**
+  - Draw: **−10**
+  - The player **catches** a cheat: **−3** (if this drains the last patience mid-round from round 4 on, the match is won)
+  - Otto **wins** a round: **+10** (never above 100)
+- **Hard rule:** patience can never reach 0 before the **end of round 3**. If it would, it is clamped at **5** and Otto says `NOT. YET.` The rampage can only happen from round 3 onwards.
 - Countering cheats and blocking lines do NOT change patience (they still give points and trigger Otto's reactions).
-- With these numbers **2 round wins** (or 1 win + a draw + a few catches) can finish Otto, so a match lasts about 2–4 rounds.
+- With these numbers the player needs at least **4 round wins** (fewer with draws and catches), so a match lasts about 4–6 rounds (5.5 on average in `npm run balance`; the player wins about 2 in 3 matches).
 - **Otto wins the match** if he wins **3 rounds** before his patience runs out (smug ending, see section 5).
 - HUD: `ROUND 2 · YOU 1 – 0 OTTO`. Otto's patience bar shows a stage label (see section 3).
 
@@ -24,7 +25,7 @@ Keep the retro pixel-art style, Snowflake memory, power-ups and cheats working. 
 - Rule changes can move the win length between 4 and 5 and grow the board up to **7×7**. The board must always be at least (win length + 1) wide.
 - A rule change happens every **3 player turns**. The first one in each round happens at the start of the player's 3rd turn, so the twist always appears.
 - Soft cap: after **20 player turns** in a round, trigger `SUDDEN DEATH: MOST LINES OF 3 WINS` and count lines to decide the round.
-- Otto's AI must handle these boards with the existing heuristic (win → block → extend his longest open line under the current rules). Otto should be beatable but not easy: on his normal moves he ignores a winning or blocking move 15% of the time when patience is above 75, 5% when 50–75, and never below 50 (he gets sharper as he gets angrier).
+- Otto's AI must handle these boards with the existing heuristic (win → block → extend his longest open line under the current rules). Otto should be beatable but not easy, and gets sharper as he gets angrier: the current chances per patience band are the skill table in SPEC.md ("Pacing"), tuned with `npm run balance`.
 
 **No instant wins or losses after a rule change** (this is a hard rule)
 - Before applying a candidate rule, **simulate it**: if under the new rule **either** player would have a move that wins immediately (a "one-move win"), **reject that rule** and try another candidate. If no candidate is safe, postpone the rule change by one turn (the countdown shows `NEW RULE DELAYED`).

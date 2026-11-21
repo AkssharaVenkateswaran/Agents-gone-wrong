@@ -163,8 +163,8 @@ export const CHEATS = [
       }
     },
     undo(state) {
-      // The counter for a double move is Time Out: Otto skips its next turn.
-      state.ottoSkipsNextTurn = true;
+      // The counter for a double move is Time Out: Otto skips its next 2 turns.
+      state.ottoSkipTurns = 2;
     },
   },
 

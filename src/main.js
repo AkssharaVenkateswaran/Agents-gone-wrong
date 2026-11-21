@@ -27,6 +27,7 @@ import {
   PATIENCE_WON_ROUND,
   PATIENCE_DRAW,
   PATIENCE_CAUGHT,
+  changePatience,
 } from './agent.js';
 import { getCheat } from './cheats.js';
 import { getPowerUp, canAfford } from './powerups.js';
@@ -181,7 +182,7 @@ function onCellClick(index) {
   }
   if (state.mode?.type === 'ownLinePick') return; // choose row/column first
 
-  // My Own Line: the free X goes anywhere in the new line and doesn't use up the turn.
+  // My Own Line: the X goes anywhere in the new line, and that X is the player's move.
   if (state.mode?.type === 'ownLinePlace') {
     if (!state.mode.cells.includes(index) || state.board.cells[index]) return;
     state.mode = null;
@@ -189,7 +190,7 @@ function onCellClick(index) {
     sfx.place();
     earn(POINTS.placeX);
     if (checkRoundEnd('X')) return;
-    setNotice('Free X placed! Now make your normal move.');
+    endPlayerTurn();
     return;
   }
 
@@ -359,7 +360,7 @@ function activatePowerUp(id) {
     return;
   }
   if (state.mode?.type === 'ownLinePlace') {
-    setNotice('Place your free X in your new line first.');
+    setNotice('Place your X in your new line first.');
     return;
   }
   if (!canAfford(state, powerUp)) {
@@ -432,7 +433,7 @@ function chooseOwnLine(type) {
   const powerUp = getPowerUp('myOwnLine');
   pay(powerUp);
   powerUp.apply(state, type); // adds the line and switches to 'ownLinePlace' mode
-  setNotice('Your new line is ready. Click a square in it for your free X.');
+  setNotice('Your new line is ready. Click a square in it for your X (that is your move).');
 }
 
 function cancelMode() {
@@ -465,7 +466,13 @@ function afterPowerUp(powerUp) {
     if (powerUp.id !== 'veto') talk(say('cheatCountered'));
   }
   if (checkRoundEnd('X')) return; // e.g. Glue Stick gave back a winning X
-  emit('change');
+  // Every power-up uses the player's turn (Double Mark's two X marks ARE the turn,
+  // My Own Line's X is the move: those end the turn when the X is placed).
+  if (powerUp.id === 'doubleMark' || powerUp.id === 'myOwnLine') {
+    emit('change');
+    return;
+  }
+  endPlayerTurn();
 }
 
 // --- Rule changes ------------------------------------------------------------------
@@ -586,8 +593,8 @@ async function ottoTurn() {
   if (state.spinBlockedTurns > 0) state.spinBlockedTurns--;
 
   // Time Out makes Otto skip a turn.
-  if (state.ottoSkipsNextTurn) {
-    state.ottoSkipsNextTurn = false;
+  if (state.ottoSkipTurns > 0) {
+    state.ottoSkipTurns--;
     talk(say('skipTurn'));
     emit('change');
     if (!(await pause(THINK_MIN_MS))) return;
@@ -799,7 +806,8 @@ function catchCheat() {
   talk(say('cheatCaught'));
   state.notice = `CAUGHT! Otto was about to use ${cheat.name}. (Otto's patience ${PATIENCE_CAUGHT})`;
   earn(POINTS.catchCheat);
-  setPatience(state, state.patience + PATIENCE_CAUGHT); // getting caught costs Otto patience
+  // Getting caught costs Otto patience (but never all of it before round 3 is over).
+  if (changePatience(state, PATIENCE_CAUGHT)) notYet();
   updateStageEffects();
   emit('change');
   sfx.caught();
@@ -808,6 +816,12 @@ function catchCheat() {
   slap(); // Otto's cursor gets slapped away
   termLog(state, `cheat.${cheat.id}`, 'ERROR: caught by human. ow.');
   if (state.patience <= 0) patienceRanOut();
+}
+
+// The hard rule kicked in: patience stopped at 5 instead of 0 (before round 3 ended).
+function notYet() {
+  state.ottoSays = 'NOT. YET.';
+  setTempMood('glitching', 900);
 }
 
 // Otto's patience hit 0 in the middle of a round (by catching a cheat): the match is won.
@@ -939,21 +953,23 @@ async function endRound(winner, line, ottoLine) {
     state.roundsWon.you++;
     earn(POINTS.winRound);
     if (soonAfterRuleChange()) earn(POINTS.ruleBonus);
-    setPatience(state, before + PATIENCE_LOST_ROUND);
+    const clamped = changePatience(state, PATIENCE_LOST_ROUND, { roundEnd: true });
     talk(ottoLine || say('roundLost'));
+    if (clamped) notYet();
     setTempMood('defeated', 3000);
     sfx.win();
     musicEvent('roundWonByPlayer');
   } else if (winner === 'O') {
     state.roundsWon.otto++;
-    setPatience(state, before + PATIENCE_WON_ROUND);
+    changePatience(state, PATIENCE_WON_ROUND, { roundEnd: true });
     talk(ottoLine || say('roundWon'));
     setTempMood('victorious', 3000);
     sfx.lose();
     musicEvent('roundWonByOtto');
   } else {
-    setPatience(state, before + PATIENCE_DRAW); // even a draw wears Otto down
+    const clamped = changePatience(state, PATIENCE_DRAW, { roundEnd: true }); // even a draw wears Otto down
     talk(ottoLine || say('draw'));
+    if (clamped) notYet();
   }
   updateStageEffects();
   state.roundEnd = { winner, change: state.patience - before };

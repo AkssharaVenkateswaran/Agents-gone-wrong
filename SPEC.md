@@ -39,8 +39,9 @@ src/
 ### Match structure: drain Otto's patience over several rounds
 - **Otto's Patience** starts at **100** and is the main goal: the player wins the match by draining it to **0**.
 - A match is made of **rounds**. After each round the board resets; patience, points and power-ups carry over.
-- Patience changes on these events only: Otto **loses** a round **−50**, a **draw** **−15**, the player **catches** a cheat **−5** (if that drains the last patience mid-round, the match is won), Otto **wins** a round **+5** (never above 100). Countering cheats and blocking lines do NOT change patience (they still give points and trigger Otto's reactions).
-- So **2 round wins** (or 1 win + a draw + a few catches) can finish Otto; a match lasts about 2–4 rounds.
+- Patience changes on these events only: Otto **loses** a round **−30**, a **draw** **−10**, the player **catches** a cheat **−3** (if that drains the last patience mid-round from round 4 on, the match is won), Otto **wins** a round **+10** (never above 100). Countering cheats and blocking lines do NOT change patience (they still give points and trigger Otto's reactions).
+- **Hard rule: patience can never reach 0 before the END of round 3.** If it would, it stops at **5** and Otto says `NOT. YET.` So the rampage can only happen from the end of round 3 on.
+- So the player needs at least **4 round wins** (fewer with draws and catches); a match lasts about 4–6 rounds (5.5 on average in the balance test).
 - **Otto wins the match** if he wins **3 rounds** before his patience runs out.
 - **Rounds 1–2** start on a **4×4** board with **WIN: 3 IN A ROW** (round 1 is the tutorial round); **round 3+** starts on **5×5** with **WIN: 4 IN A ROW**. In round 1, when Otto is one move from winning, the threatened square pulses gently and Otto says `> threat: you're about to lose, human`.
 - Otto plays fair until the first rule change of each round and **can't win before it**.
@@ -54,10 +55,11 @@ src/
 - **Otto makes mistakes**, fewer as it gets angrier (lower patience). On each normal move it takes its own winning move, blocks the player's winning threat, and otherwise plays its best square (else a random square next to existing marks) with these chances, on every board size and rule (`npm run balance` reports how the test bot does):
   | Patience | Takes its win | Blocks the player | Plays its best square |
   |---|---|---|---|
-  | 100–76 | 26% | 18% | 22% |
-  | 75–51 | 31% | 22% | 27% |
-  | 50–26 | 55% | 43% | 48% |
-  | 25–0 | 57% | 45% | 50% |
+  | 100–76 | 8% | 5% | 6% |
+  | 75–51 | 10% | 6% | 8% |
+  | 50–26 | 16% | 11% | 13% |
+  | 25–0 | 18% | 12% | 14% |
+- Balance targets (`npm run balance`, 1000 simulated matches, the player bot follows the power-up turn rule): the player wins about **2 in 3 matches** (66.5%), rounds at patience 100–51 about 67–69%, at 50–1 about 55–61%, and no match ever reaches the rampage before round 3 ends.
 - Otto's "best square" looks one move ahead and avoids squares that let the player set up two threats at once.
 - **Cheats are rare and never decide a round:** at most 1 cheat attempt every 3 Otto turns, none in Otto's first 2 turns of a round, none before the round's first rule change. The chance of a cheat grows from 20% (patience 100) to 80% (patience 0). Each cheat is first tried on a copy of the game and skipped if it would complete a winning line for Otto or remove the player's only winning move.
 - Each cheat also has a **cooldown** (a few turns).
@@ -104,13 +106,15 @@ Rules come in 3 categories, shown as 3 fixed rows in `RULES.TXT`. Only **one rul
 | **Extra Line** | Otto scribbles a new row or column onto the grid and instantly puts an O in it | **Eraser** (removes Otto's added line and its marks) |
 | **Minion Drop** | Otto throws 1–2 tiny pixel minion robots onto empty squares, which become unclickable | **Flick** (click a minion to flick it off the board) |
 | **Mark Steal** | Otto repaints one of the player's X marks into an O | **Glue Stick** (undo the steal, and that mark is protected forever) |
-| **Double Move** | Otto places two O marks in one turn | **Time Out** (Otto skips its next turn) |
+| **Double Move** | Otto places two O marks in one turn | **Time Out** (Otto skips its next 2 turns) |
 | **Board Spin** | The board rotates 90° | **Paperweight** (undo the spin, and blocks spins for 3 turns) |
 | **Rewrite the Rules** | When frustrated, Otto brings the next rule change forward to the start of the player's next turn (never sooner than 5 turns after the last change) | **Veto** (cross out the new rule) |
 
 Lights Out lasts until countered or 3 player turns pass. It must be a smooth fade — no flashing.
 
 ### Player power-ups (spent with points)
+**Every power-up uses the player's turn:** after using one, it's Otto's turn (no extra move). Tooltips say "Uses your turn". NOT power-ups (they don't use a turn): catching a cheat, bonking roaming minions, rescuing a stolen floppy, plugging the cable back in, clicking OK on pop-ups, restoring `TOOLBOX.EXE`.
+
 | Power-up | Cost | Effect |
 |---|---|---|
 | Flick | 2 | Removes one minion blocker |
@@ -118,9 +122,9 @@ Lights Out lasts until countered or 3 player turns pass. It must be a smooth fad
 | Eraser | 3 | Removes a line Otto added (and its marks) |
 | Paperweight | 3 | Undoes a Board Spin and blocks spins for 3 turns |
 | Glue Stick | 4 | Undoes a Mark Steal; that mark is protected forever |
-| Time Out | 5 | Otto skips its next turn |
-| **My Own Line** | 5 | The player draws their own extra row or column and places a free X in it |
-| **Double Mark** | 6 | The player places two X marks this turn |
+| Time Out | 5 | Otto skips its next 2 turns |
+| **My Own Line** | 5 | The player draws their own extra row or column and places their X in it (that X is their move) |
+| **Double Mark** | 6 | The player places two X marks: that is their whole turn |
 | **Veto** | 5 | Cross out the newest rule and bring back the one it replaced |
 | **Amendment** | 6 | At the next rule change, the player picks the new rule from 3 cards instead of Otto |
 
@@ -129,12 +133,13 @@ Keyboard shortcuts: 1–9 and 0 for the 10 power-ups.
 Power-ups are pixel floppy disks in the `TOOLBOX.EXE` window on the left, each in its own palette colour, with its full name on the label (up to 2 lines, never cut off) and its cost as a pixel number. Keyboard shortcuts are in the tooltip. A disk is greyed out only when it's unaffordable or would do nothing right now (the tooltip says which). The disks are as big as the window allows.
 
 ### Earning points
-- Start each match with 6 points
-- +2 for each X placed
-- +3 for blocking a row where Otto had two in a row
+- Start each match with 4 points
+- +1 for each X placed
+- +2 for blocking a row where Otto had two in a row
 - +2 for countering a cheat within 2 turns of it happening
-- +4 for catching a cheat during its telegraph window
-- +5 for winning a round
+- +3 for catching a cheat during its telegraph window
+- +4 for winning a round
+- +1 for bonking a roaming minion (max 5 per round) or rescuing a stolen floppy
 - +3 extra for winning or blocking within 2 turns of a rule change
 
 Show point gains as small "+3" pixel pops that float up and fade.

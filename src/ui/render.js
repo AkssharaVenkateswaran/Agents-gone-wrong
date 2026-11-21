@@ -434,8 +434,8 @@ function renderToolbox() {
     return `
       <button class="disk ${greyed ? 'greyed' : ''} ${active ? 'active' : ''} ${insertingDisk === p.id ? 'inserting' : ''}"
               data-powerup="${p.id}" style="${fly}"
-              aria-label="${p.name}, costs ${p.cost} points. ${p.help}${why} Shortcut key ${p.key}."
-              title="${p.name} (key ${p.key}, ${p.cost} pts): ${p.help}${why}"
+              aria-label="${p.name}, costs ${p.cost} points. ${p.help} Uses your turn.${why} Shortcut key ${p.key}."
+              title="${p.name} (key ${p.key}, ${p.cost} pts): ${p.help} Uses your turn.${why}"
               ${greyed ? 'aria-disabled="true"' : ''}>
         ${sprite(floppy(DISK_COLOURS[p.id]))}
         <span class="disk-label">${DISK_NAMES[p.id]}</span>
@@ -468,7 +468,7 @@ function renderCentre() {
     indicator = '&gt; NEW RULE...';
   } else if (state.turn === 'X') {
     tone = 'you';
-    const what = state.mode?.type === 'ownLinePlace' ? 'PLACE YOUR FREE X' : state.extraMarks > 0 ? 'PLACE 2 X MARKS' : 'YOUR TURN';
+    const what = state.mode?.type === 'ownLinePlace' ? 'PLACE YOUR X IN YOUR LINE' : state.extraMarks > 0 ? 'PLACE 2 X MARKS' : 'YOUR TURN';
     indicator = `&gt; ${what}<span class="cursor" aria-hidden="true">_</span>`;
   } else if (state.telegraph) {
     indicator = '&gt; OTTO IS UP TO SOMETHING... CLICK OTTO!';

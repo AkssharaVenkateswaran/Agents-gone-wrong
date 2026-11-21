@@ -92,10 +92,26 @@ export function pickCheat(state) {
 // --- Otto's patience ------------------------------------------------------------------------
 // Patience (100 -> 0): the player wins the match by draining it to 0. Its opposite,
 // "frustration" (0 -> 100), is what makes Otto sharper and cheat more (see ai.js and pickCheat).
-export const PATIENCE_LOST_ROUND = -50; // Otto loses a round
-export const PATIENCE_DRAW = -15;       // a round ends in a draw
-export const PATIENCE_CAUGHT = -5;      // the player catches one of Otto's cheats
-export const PATIENCE_WON_ROUND = 5;    // Otto wins a round (never above 100)
+export const PATIENCE_LOST_ROUND = -30; // Otto loses a round
+export const PATIENCE_DRAW = -10;       // a round ends in a draw
+export const PATIENCE_CAUGHT = -3;      // the player catches one of Otto's cheats
+export const PATIENCE_WON_ROUND = 10;   // Otto wins a round (never above 100)
+
+// Hard rule: patience can never reach 0 before the END of round 3 (so the rampage
+// can only happen from round 3 on). If it would, it stops at 5 and Otto says "NOT. YET."
+export const PATIENCE_FLOOR = 5;
+export const RAMPAGE_FROM_ROUND = 3;
+
+// Change patience by `delta`. `roundEnd`: this change is the result of a finished round.
+// Returns true if the hard rule kicked in (patience clamped at 5).
+export function changePatience(state, delta, { roundEnd = false } = {}) {
+  let next = state.patience + delta;
+  const tooEarly = state.roundNumber < RAMPAGE_FROM_ROUND || (state.roundNumber === RAMPAGE_FROM_ROUND && !roundEnd);
+  const clamped = next <= 0 && tooEarly;
+  if (clamped) next = PATIENCE_FLOOR;
+  setPatience(state, next);
+  return clamped;
+}
 
 export function setPatience(state, patience) {
   state.patience = Math.max(0, Math.min(100, Math.round(patience)));

@@ -47,10 +47,10 @@ function makesLine(state, landing, mark) {
 // Tuned with scripts/balance-test.mjs so the test bot wins about 70% of rounds
 // against Otto at patience 100-51, about 55% at 50-1, and ~80% of whole matches.
 export const SKILL = [
-  { minPatience: 76, takeWin: 0.26, block: 0.18, best: 0.22 },
-  { minPatience: 51, takeWin: 0.31, block: 0.22, best: 0.27 },
-  { minPatience: 26, takeWin: 0.55, block: 0.43, best: 0.48 },
-  { minPatience: 0, takeWin: 0.57, block: 0.45, best: 0.5 },
+  { minPatience: 76, takeWin: 0.08, block: 0.05, best: 0.06 },
+  { minPatience: 51, takeWin: 0.1, block: 0.06, best: 0.08 },
+  { minPatience: 26, takeWin: 0.16, block: 0.11, best: 0.13 },
+  { minPatience: 0, takeWin: 0.18, block: 0.12, best: 0.14 },
 ];
 
 export function skillFor(state) {
