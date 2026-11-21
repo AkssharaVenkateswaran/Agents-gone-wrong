@@ -216,10 +216,10 @@ export async function performSabotage(kind, apply, clickSound) {
     await wiggle();
     apply();
   } else if (kind === 'hideBubble') {
-    await moveTo('.bubble');
+    await moveTo('.speech-bar');
     await click(clickSound);
-    const to = pointOf('.patience');
-    if (to) await dragThrough([to], 200);
+    const from = pointOf('.speech-bar');
+    if (from) await dragThrough([{ x: from.x + 18, y: from.y }], 200); // shoves it aside
     apply();
   }
 }

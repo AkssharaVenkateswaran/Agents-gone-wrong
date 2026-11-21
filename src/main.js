@@ -60,7 +60,7 @@ import {
 import { say, sayRule, sayFromMemory, sayCatchRate, shout, RAMPAGE_LINES } from './dialogue.js';
 import { fetchStats, saveMatch, fetchTactics } from './memory.js';
 import { cheatReasoning, ruleReasoning } from './tactics.js';
-import { termLog, cellName, panicLine, scanResult } from './terminal.js';
+import { termLog, termSay, termSys, termDivider, cellName, panicLine, scanResult } from './terminal.js';
 import { FIRST_MOVES, cleanName } from './matchLog.js';
 import { sfx, setMuted, setDetune, startBuzz, stopBuzz, staticNoise } from './sfx.js';
 import {
@@ -855,7 +855,7 @@ async function maybeSabotage(force = null) {
     dragToolbox: ['ui.drag --window=TOOLBOX.EXE', 'oops. moved it.'],
     minimiseToolbox: ['ui.minimise --window=TOOLBOX.EXE', 'toolbox gone. bye.'],
     shuffleDisks: ['ui.shuffle --target=floppies', 'good luck finding anything.'],
-    hideBubble: ['ui.drag --window=bubble --to=patience', "you didn't see that."],
+    hideBubble: ['ui.drag --window=speech --shove', "you didn't see that."],
   };
   termLog(state, ...commands[kind]);
   emit('change');
@@ -1558,6 +1558,29 @@ initChaos(
   }),
   () => setTempMood('glitching', 700), // Meltdown glitch bursts: Otto glitches too
 );
+// Everything Otto says (OTTO:) and every game notice (SYS:) also goes into his
+// terminal, with a divider at the start of each round. (Runs before each redraw.)
+let loggedSays = null;
+let loggedNotice = null;
+function logToTerminal() {
+  if (state.screen !== 'game') return;
+  if (state.roundNumber !== state.terminalRound) {
+    state.terminalRound = state.roundNumber;
+    termDivider(state, `ROUND ${state.roundNumber}`);
+    loggedSays = null;
+  }
+  const says = state.ottoSays;
+  if (says && says !== loggedSays) {
+    loggedSays = says;
+    const muted = state.hack?.overrides?.taunts === false; // HACK.EXE: he can only mutter
+    if (!says.startsWith('OTTO@AGENT')) termSay(state, muted ? '...' : says);
+  }
+  if (state.notice !== loggedNotice) {
+    loggedNotice = state.notice;
+    if (state.notice) termSys(state, state.notice);
+  }
+}
+on('change', logToTerminal);
 on('change', () => emit('render'));
 resetMatch();
 state.playerName = recall(NAME_KEY);

@@ -101,7 +101,7 @@ export function glitchBurst({ ottoTurn = false, force = false } = {}) {
 
 // --- What must stay clean -----------------------------------------------------------------------
 function keepClear() {
-  return [...document.querySelectorAll('.board-area, .turn-indicator, .rule-popup, .ending-window, .debug')]
+  return [...document.querySelectorAll('.board-area, .turn-indicator, .speech-bar, .rule-popup, .ending-window, .debug')]
     .map((el) => el.getBoundingClientRect())
     .filter((r) => r.width > 0);
 }

@@ -6,7 +6,8 @@
 //   top bar:  title · score · Snowflake disk · mute
 //   left:     TOOLBOX.EXE  (points + power-up floppy disks)
 //   centre:   turn indicator, the big CRT monitor (win banner + board), message line
-//   right:    Otto's little CRT, his speech bubble, patience bar, RULES.TXT
+//   centre:   ...and Otto's speech bar under the monitor
+//   right:    Otto's little CRT, patience bar, his OTTO@AGENT:~$ terminal, RULES.TXT
 
 import { state, on, ROUND_TURN_CAP, OTTO_ROUNDS_TO_WIN } from '../state.js';
 import { CHEATS, MAX_GRID_SIZE } from '../cheats.js';
@@ -94,6 +95,7 @@ export function initRender(rootElement, callbacks) {
     if (t.closest('#music')) handlers.onMusic();
     if (t.closest('#skip')) handlers.onSkip();
     if (t.closest('#restore-toolbox')) handlers.onRestoreToolbox();
+    if (t.closest('.term-new')) terminalToBottom();
     if (t.closest('#plug')) handlers.onPlugIn();
     const disk = t.closest('[data-powerup]');
     if (disk) {
@@ -116,6 +118,12 @@ export function initRender(rootElement, callbacks) {
     e.preventDefault();
     handlers.onStart(e.target.elements.playerName.value);
   });
+
+  // Scrolling the terminal back down to the newest line hides "▼ new".
+  root.addEventListener('scroll', (e) => {
+    if (!e.target.classList?.contains('terminal-body')) return;
+    if (terminalScroll().atBottom) terminalToBottom();
+  }, true);
 
   // Arrow keys move around the board. Enter/Space press the focused square.
   root.addEventListener('keydown', (e) => {
@@ -234,6 +242,7 @@ function render() {
   const boardHadFocus = !!document.activeElement?.closest?.('[data-cell]');
 
   applyStage();
+  const terminalBefore = terminalScroll();
   root.innerHTML = `
     ${renderTopBar()}
     <div class="main">
@@ -253,7 +262,37 @@ function render() {
 
   setLights(!state.lightsOut);
   if (boardHadFocus) focusCell();
+  restoreTerminalScroll(terminalBefore);
   afterRender();
+}
+
+// --- The terminal's scroll position survives redraws -----------------------------------------
+// Following the newest line (scrolled to the bottom): stay at the bottom.
+// Scrolled up to read: stay put, and show "▼ new" when new lines arrive.
+let terminalSeenId = 0;
+function terminalScroll() {
+  const body = root.querySelector('.terminal-body');
+  if (!body) return { atBottom: true, top: 0 };
+  return { atBottom: body.scrollHeight - body.scrollTop - body.clientHeight < 8, top: body.scrollTop };
+}
+function restoreTerminalScroll({ atBottom, top }) {
+  const body = root.querySelector('.terminal-body');
+  if (!body) return;
+  const newest = state.terminal.length ? state.terminal[state.terminal.length - 1].id : 0;
+  if (atBottom) {
+    body.scrollTop = body.scrollHeight;
+    terminalSeenId = newest;
+  } else {
+    body.scrollTop = top;
+  }
+  root.querySelector('.term-new').hidden = newest <= terminalSeenId;
+}
+function terminalToBottom() {
+  const body = root.querySelector('.terminal-body');
+  if (!body) return;
+  body.scrollTop = body.scrollHeight;
+  terminalSeenId = state.terminal.length ? state.terminal[state.terminal.length - 1].id : 0;
+  root.querySelector('.term-new').hidden = true;
 }
 
 // --- Otto's stage: how unhinged the whole screen looks ------------------------------------------
@@ -528,8 +567,25 @@ function renderCentre() {
             <i></i>${state.ui.unplugged ? '<span>PLUG IN</span>' : ''}</button>
         </div>
       </div>
-      <p class="message-line" role="status">${state.notice || '&nbsp;'}</p>
+      ${renderSpeechBar()}
     </section>`;
+}
+
+// Otto's speech bar, under the monitor (game notices go into his terminal as SYS: lines).
+function renderSpeechBar() {
+  const look = ottoLook(state);
+  const text = look.thinking
+    ? '<span class="dots" aria-label="Otto is thinking"><i></i><i></i><i></i></span>'
+    : state.hack?.overrides?.taunts === false
+      ? '...' // HACK.EXE: otto.taunts = false, Otto can only mutter
+      : escapeHtml(state.ottoSays);
+  const icon = sprite(OTTO_FACES[look.thinking ? 'thinkLeft' : look.face] || OTTO_FACES.smug);
+  return `
+    <div class="bubble speech-bar ${bubbleJitter()} ${state.ui.bubbleDown ? 'dragged' : ''} ${state.ottoSays.startsWith('OTTO@AGENT') && !look.thinking ? 'terminal' : ''}"
+         role="status" aria-live="polite" aria-label="Otto says">
+      <span class="speech-face colours-${look.colours}" aria-hidden="true">${icon}</span>
+      <span class="speech-text">${text}</span>
+    </div>`;
 }
 
 // What was on the board last time we drew it — so only NEW marks "dissolve in",
@@ -729,11 +785,6 @@ function renderOtto() {
   const face = look.thinking
     ? `<span class="otto-face think">${sprite(OTTO_FACES.thinkLeft, 'f1')}${sprite(OTTO_FACES.thinkRight, 'f2')}</span>`
     : `<span class="otto-face ${state.telegraph ? 'flicker' : ''}">${sprite(OTTO_FACES[look.face])}</span>`;
-  const bubble = look.thinking
-    ? '<span class="dots" aria-label="Otto is thinking"><i></i><i></i><i></i></span>'
-    : state.hack?.overrides?.taunts === false
-      ? '...' // HACK.EXE: otto.taunts = false, Otto can only mutter
-      : escapeHtml(state.ottoSays);
   const patience = state.patience;
   const stageLabel = STAGES[stageOf(patience)].label;
   const segments = 20;
@@ -748,7 +799,6 @@ function renderOtto() {
         ${redScreen ? '<span class="otto-screen-text">PATIENCE.SYS<br>NOT FOUND</span>' : face}
         ${ottoExtras(look.extras)}
       </button>
-      <div class="bubble ${bubbleJitter()} ${state.ui.bubbleDown ? 'dragged' : ''} ${state.ottoSays.startsWith('OTTO@AGENT') && !look.thinking ? 'terminal' : ''}" role="status" aria-live="polite">${bubble}</div>
       <div class="patience">
         <span id="patience-label">OTTO'S PATIENCE: <b class="stage-label">${stageLabel}</b></span>
         <div class="patience-bar ${patience < 30 ? 'low' : ''}" role="progressbar" aria-labelledby="patience-label"
@@ -758,27 +808,32 @@ function renderOtto() {
 }
 
 // --- Right: Otto's terminal (OTTO@AGENT:~$) ----------------------------------------------------
-// The newest command types itself out (kept smooth across redraws with since()).
-const TERMINAL_SHOWN = 3; // entries on screen (each is a command + a result line)
+// The whole match's history (last 100 lines): commands pink, results lime, Otto's
+// lines yellow ("OTTO:"), game notices cyan ("SYS:"), a divider per round. Long lines
+// wrap. The newest command types itself out (kept smooth across redraws with since()).
 function renderTerminal() {
-  const entries = (state.terminal || []).slice(-TERMINAL_SHOWN);
-  const lines = entries.map((entry, n) => {
-    const newest = n === entries.length - 1;
+  const entries = state.terminal || [];
+  const newestCmd = entries.findLast?.((entry) => entry.kind === 'cmd');
+  const lines = entries.map((entry) => {
+    if (entry.kind === 'say') return `<div class="term-line term-say">OTTO: ${escapeHtml(entry.text)}</div>`;
+    if (entry.kind === 'sys') return `<div class="term-line term-sys">SYS: ${escapeHtml(entry.text)}</div>`;
+    if (entry.kind === 'divider') return `<div class="term-line term-divider">${escapeHtml(entry.text)}</div>`;
     const typeMs = Math.min(900, entry.command.length * 22);
-    const elapsed = newest ? since(entry.at, typeMs + 200) : null;
+    const elapsed = entry === newestCmd ? since(entry.at, typeMs + 200) : null;
     const typing = elapsed !== null
-      ? `style="--chars:${entry.command.length};--type:${typeMs}ms;animation-delay:${-elapsed}ms"`
+      ? `style="--chars:${entry.command.length + 14};--type:${typeMs}ms;animation-delay:${-elapsed}ms"`
       : '';
     return `
-      <div class="term-entry">
-        <div class="term-cmd ${typing ? 'typing' : ''}" ${typing}><span class="prompt">OTTO@AGENT:~$</span> ${escapeHtml(entry.command)}</div>
-        <div class="term-result ${typing ? 'waiting' : ''}" ${typing ? `style="animation-delay:${typeMs - elapsed}ms"` : ''}>&gt; ${escapeHtml(entry.result)}</div>
-      </div>`;
+      <div class="term-line term-cmd ${typing ? 'typing' : ''}" ${typing}><span class="prompt">OTTO@AGENT:~$</span> ${escapeHtml(entry.command)}</div>
+      <div class="term-line term-result ${typing ? 'waiting' : ''}" ${typing ? `style="animation-delay:${typeMs - elapsed}ms"` : ''}>&gt; ${escapeHtml(entry.result)}</div>`;
   }).join('');
   return `
-    <section class="terminal window" aria-label="Otto's terminal" aria-live="polite">
+    <section class="terminal window" aria-label="Otto's terminal">
       ${titleBar('OTTO@AGENT:~$')}
-      <div class="terminal-body">${lines || '<div class="term-entry"><span class="prompt">OTTO@AGENT:~$</span> <span class="term-cursor">_</span></div>'}</div>
+      <div class="terminal-body" role="log" tabindex="0" aria-label="Otto's terminal history">
+        ${lines || '<div class="term-line"><span class="prompt">OTTO@AGENT:~$</span> <span class="term-cursor">_</span></div>'}
+      </div>
+      <button type="button" class="term-new" hidden>▼ new</button>
     </section>`;
 }
 

@@ -3,7 +3,7 @@
 // The commands map to what Otto really does: scan, place, cheat.<id>, lights.off,
 // minion.deploy, rules.rewrite, ui.drag, ui.minimise, ui.shuffle.
 
-export const TERMINAL_LINES = 12; // how many entries are kept
+export const TERMINAL_LINES = 100; // how many lines are kept (the whole match, mostly)
 
 // A square's name on the board: column letter + row number, e.g. C3.
 export function cellName(board, index) {
@@ -12,9 +12,33 @@ export function cellName(board, index) {
   return `${'ABCDEFGHI'[c]}${r + 1}`;
 }
 
+// Terminal entries: { kind, ..., id, at }
+//   cmd      a command + its result (2 lines)    say  Otto's spoken line ("OTTO: ...")
+//   sys      a game notice ("SYS: ...")           divider  "──── ROUND 2 ────"
+function addEntry(state, entry) {
+  state.terminalSeq = (state.terminalSeq || 0) + 1;
+  const entries = [...(state.terminal || []), { ...entry, id: state.terminalSeq, at: Date.now() }];
+  // keep the last 100 LINES (a command entry is 2 lines)
+  let lines = entries.reduce((sum, e) => sum + (e.kind === 'cmd' ? 2 : 1), 0);
+  while (lines > TERMINAL_LINES) lines -= entries.shift().kind === 'cmd' ? 2 : 1;
+  state.terminal = entries;
+}
+
 // Add one command + result to Otto's terminal.
 export function termLog(state, command, result) {
-  state.terminal = [...(state.terminal || []), { command, result, at: Date.now() }].slice(-TERMINAL_LINES);
+  addEntry(state, { kind: 'cmd', command, result });
+}
+
+export function termSay(state, text) {
+  addEntry(state, { kind: 'say', text });
+}
+
+export function termSys(state, text) {
+  addEntry(state, { kind: 'sys', text });
+}
+
+export function termDivider(state, label) {
+  addEntry(state, { kind: 'divider', text: `──── ${label} ────` });
 }
 
 // At the Meltdown stage Otto's commands get panicked and buggy.

@@ -132,7 +132,7 @@ function glitchTitle() {
 // Fake pop-ups in EMPTY space (never over the board, and normally not over any
 // panel either). Both buttons say WAIT and close it. During the rampage (`anywhere`)
 // they may cover the other panels, but still never the board.
-const PANELS = '.otto-area, .rules, .toolbox, .topbar, .turn-indicator, .message-line';
+const PANELS = '.otto-area, .rules, .toolbox, .topbar, .turn-indicator, .speech-bar, .terminal';
 export function spawnFakePopups(count, text, max = Infinity, anywhere = false) {
   const monitor = document.querySelector('.monitor')?.getBoundingClientRect();
   const panels = anywhere ? [] : [...document.querySelectorAll(PANELS)].map((el) => el.getBoundingClientRect());

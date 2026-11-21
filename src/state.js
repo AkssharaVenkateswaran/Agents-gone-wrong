@@ -53,7 +53,9 @@ export function freshMatchState() {
     hack: null,             // HACK.EXE: the running hack { overrides, original, changed, turnsLeft } (see hack.js)
     hackComments: [],       // Otto's angry comments at the top of otto.cfg (kept all match)
     forcedLook: null,       // { mood, until }: a HACK.EXE reaction face (see emotions.js)
-    terminal: [],           // OTTO@AGENT:~$ — Otto's commands and their results (see terminal.js)
+    terminal: [],           // OTTO@AGENT:~$ — the match's history (commands, OTTO:, SYS:, dividers; see terminal.js)
+    terminalSeq: 0,         // id of the newest terminal entry
+    terminalRound: 0,       // the round the last "──── ROUND n ────" divider was for
     tactics: null,          // what beats humans across everyone's games (GET /api/tactics), or null
     matchOver: false,
     result: null,           // 'X' (patience drained) or 'O' (Otto won 3 rounds)

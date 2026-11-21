@@ -267,9 +267,10 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
 .turn-timer { display: inline-flex; align-items: center; gap: 6px; --px: 3; color: var(--yellow); }
 
 .monitor-area { flex: 1; width: 100%; min-height: 0; display: grid; place-items: center; }
+.centre > * { --mon: min(100cqw, 100cqh - 172px); } /* the monitor and the speech bar share this width */
 .monitor {
-  /* as big as fits: min(column width, column height - 140px) */
-  width: min(100cqw, 100cqh - 140px);
+  /* as big as fits: min(column width, column height minus the turn indicator and speech bar) */
+  width: var(--mon);
   transform: rotate(var(--tilt, 0deg)); /* Otto's stage tilts the monitor */
   transition: transform 1.2s ease-out;
   aspect-ratio: 1;
@@ -377,15 +378,6 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
   100% { transform: translateY(120vh) rotate(160deg); }
 }
 
-.message-line {
-  margin: 0;
-  min-height: 48px;
-  max-width: 100%;
-  text-align: center;
-  font: 22px var(--text-font);
-  color: var(--cream);
-  text-shadow: 2px 2px 0 var(--ink);
-}
 
 /* --- Pop-ups over the monitor: NEW_RULE.EXE, AMEND.EXE, MYLINE.EXE --- */
 .rule-popup-stack {
@@ -454,31 +446,49 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
 .otto-face.flicker { animation: flicker 0.7s steps(1) infinite; } /* < 2 times per second */
 @keyframes flicker { 50% { opacity: 0.5; } }
 
-.bubble {
+/* Otto's speech bar, under the CRT and as wide as it (it replaced the old message line;
+   game notices go into Otto's terminal). Sunny yellow, a tiny Otto face, max 2 lines. */
+.bubble.speech-bar {
   position: relative;
-  width: 100%;
-  min-height: 64px;
-  padding: 4px 8px;
-  font: 22px/1.1 var(--text-font);
+  z-index: 2;                 /* nothing in the centre column draws over it */
+  flex: none;
+  width: var(--mon);
+  height: 66px;               /* always 2 lines tall, so the layout never jumps */
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 8px;
+  font: 24px/26px var(--text-font);
   color: var(--ink);
-  border: 12px solid transparent;
-  border-image: var(--frame-yellow) 4 fill / 12px / 0 stretch;
-  filter: drop-shadow(4px 4px 0 var(--ink));
-  /* at most 2 lines */
-  display: -webkit-box;
+  background: #FFE45C;
+  border: 3px solid #140A2E;
+  box-shadow: 4px 4px 0 #140A2E;  /* hard shadow */
+}
+/* a small stepped tail at the top right, pointing up-right towards Otto */
+.bubble.speech-bar::before {
+  content: '';
+  position: absolute;
+  right: 22px;
+  top: -15px;
+  width: 21px;
+  height: 15px;
+  background: var(--bubble-tail);
+  transform: skewX(-30deg);
+  transform-origin: bottom;
+}
+.speech-face {
+  flex: none; display: grid; place-items: center; width: 40px; height: 40px;
+  background: var(--screen, #1b1e4b); border: 3px solid #140A2E; --px: 2;
+}
+.speech-face svg { width: 32px; height: auto; }
+.speech-text {
+  min-width: 0;
+  display: -webkit-box;       /* at most 2 lines */
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-.bubble::before {
-  content: '';
-  position: absolute;
-  top: -27px;
-  left: 50%;
-  width: 21px;
-  height: 15px;
-  translate: -50% 0;
-  background: var(--bubble-tail);
+  overflow-wrap: anywhere;
 }
 .dots { display: inline-flex; gap: 8px; padding: 8px 0; }
 .dots i { width: 9px; height: 9px; background: var(--ink); animation: hop 0.9s steps(2) infinite; }
@@ -792,7 +802,7 @@ body.stage-3:not(.calm) .rules-scribble { display: block; }
 body.calm .extra { animation: none; }
 
 /* Otto's terminal: when everyone's games (Snowflake) shaped its choice. */
-.bubble.terminal { white-space: pre-line; -webkit-line-clamp: 4; font: 18px/1.05 var(--text-font); background-clip: padding-box; }
+.bubble.terminal .speech-text { white-space: pre-line; font: 20px/1.05 var(--text-font); }
 /* TWIN.DAT on the end screens */
 .twin { width: 100%; text-align: left; }
 .twin-body { display: flex; align-items: center; gap: 12px; font: 22px var(--text-font); }
@@ -829,39 +839,59 @@ body.calm .extra { animation: none; }
 .toolbox-minimised { display: grid; align-content: start; gap: 8px; }
 .taskbar-btn { justify-self: start; }
 .taskbar-note { margin: 0; font: 20px var(--text-font); color: var(--cream); }
-.bubble.dragged { translate: 0 64px; z-index: 3; }
+.bubble.dragged { translate: 18px 0; rotate: -1.5deg; } /* Otto's cursor shoved it (cosmetic) */
 
 /* ==========================================================================
    Otto's terminal: OTTO@AGENT:~$ (AGENTIC.md section 2)
    ========================================================================== */
-.terminal { flex: none; }
+/* it takes all the space between Otto's patience bar and RULES.TXT */
+.terminal { position: relative; flex: 1 1 0; min-height: 90px; display: flex; flex-direction: column; }
 .terminal-body {
-  height: 106px;
-  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
   padding: 4px 8px;
   background: #000;
   color: var(--lime);
-  font: 18px/1 var(--text-font);
+  font: 18px/1.1 var(--text-font);
   text-shadow: var(--glow);
+  scrollbar-color: var(--lime) #0b0f0b;   /* Firefox */
+  scrollbar-width: thin;
 }
-.term-cmd, .term-result { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.term-result { color: var(--phosphor); padding-left: 8px; }
-.prompt { color: var(--pink); }
+.terminal-body > :first-child { margin-top: auto; } /* short history sits at the bottom */
+.terminal-body:focus-visible { outline: 3px solid var(--cyan); outline-offset: -3px; }
+/* pixel-style scrollbar */
+.terminal-body::-webkit-scrollbar { width: 12px; }
+.terminal-body::-webkit-scrollbar-track { background: #0b0f0b; border-left: 2px solid #1b2a1b; }
+.terminal-body::-webkit-scrollbar-thumb { background: var(--lime); border: 3px solid #0b0f0b; box-shadow: inset -2px -2px 0 #3c8a2a; }
+.terminal-body::-webkit-scrollbar-button { display: none; }
+/* long lines wrap (never cut off) */
+.term-line { white-space: pre-wrap; overflow-wrap: anywhere; }
+.term-cmd { color: var(--pink); }
+.term-result { color: var(--lime); padding-left: 8px; }
+.term-say { color: #FFE45C; }
+.term-sys { color: var(--cyan); }
+.term-divider { color: #6f7f6f; text-align: center; padding: 4px 0; text-shadow: none; }
+.prompt { color: #c9467e; }
+.term-new {
+  position: absolute; right: 22px; bottom: 16px; padding: 2px 8px;
+  font: 16px/1 var(--text-font); color: #000; background: var(--lime); border: 2px solid var(--ink); cursor: pointer;
+}
+.term-new[hidden] { display: none; }
 /* the newest command types itself out, then its result appears */
-.term-cmd.typing { max-width: 0; animation: type-in var(--type) steps(var(--chars)) forwards; }
-@keyframes type-in { to { max-width: 100%; } }
+.term-cmd.typing { clip-path: inset(0 100% 0 0); animation: type-in var(--type) steps(var(--chars)) forwards; }
+@keyframes type-in { to { clip-path: inset(0 0 0 0); } }
 .term-result.waiting { visibility: hidden; animation: show-line 0s linear forwards; }
 @keyframes show-line { to { visibility: visible; } }
 .term-cursor { animation: blink 1s steps(1) infinite; }
 @media (max-height: 820px) {
-  .terminal-body { height: 54px; }             /* 2 entries on short screens */
   .otto-side { gap: 8px; }
   .otto-area { gap: 4px; }
-  .bubble { min-height: 52px; }
   .rule-row { padding: 1px 4px; }
+  .bubble.speech-bar { height: 62px; font-size: 22px; line-height: 24px; }
 }
 
 /* ==========================================================================
@@ -901,7 +931,7 @@ body.calm .extra { animation: none; }
 }
 /* the monitor cable (Unplugger): click it to plug it back in */
 .monitor { position: relative; }
-.cable { position: absolute; right: 12%; bottom: -16px; width: 26px; height: 30px; padding: 0; border: 0; background: none; cursor: pointer; }
+.cable { position: absolute; right: 12%; bottom: -2px; width: 26px; height: 26px; padding: 0; border: 0; background: none; cursor: pointer; }
 .cable i { position: absolute; left: 10px; top: 0; width: 6px; height: 100%; background: var(--ink); }
 .cable.unplugged i { height: 45%; rotate: 30deg; transform-origin: top; }
 .cable span {
@@ -1019,7 +1049,7 @@ body.cracks-pulse .crack { animation: crack-pulse 1.6s steps(4) infinite; }
   .alert-popup { animation: fade-out 1.6s steps(1) forwards; }
   .confetti { display: none; }
   .extra, .wipe-new { animation: none; }
-  .term-cmd.typing { animation: none; max-width: 100%; }
+  .term-cmd.typing { animation: none; clip-path: none; }
   .roamer svg, .roamer.walking svg { animation: none; }
   .tv-layer .tv-bar, .tv-layer.zap .tv-snow { animation: none; }
   .denied-title, .hack-line.typing::after { animation: none; }

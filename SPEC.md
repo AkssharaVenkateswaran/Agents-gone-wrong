@@ -158,7 +158,7 @@ Must work on **any grid size** (up to 7×7) and for the **current** win rule: an
 - **Evil twin (in `GET /api/stats`):** each player's style is 6 numbers (corner openings, centre openings, win rate, power-ups per match, match length, catch rate); Snowflake's `VECTOR_COSINE_SIMILARITY` finds the most similar other player (JavaScript cosine fallback if the VECTOR cast fails; all-zero styles are left out). Match-start taunt: *"Your play style is 94% identical to Bob. Bob lost too."* (or *"won once. Lucky."*); with no history: *"No data on you yet, human. I'm watching."*; the end screens show a `TWIN.DAT` window with two tiny pixel figures.
 
 ### Otto acts like an agent (`AGENTIC.md`)
-- **Otto's cursor** (pink pixel hand tagged OTTO, never takes clicks) performs every action before it lands: moves (glide, hover, click), rule changes (types the new rule into RULES.TXT, then NEW_RULE.EXE), and each cheat (light switch, pixel pen, `MINIONS/` folder, trash can, double click with a wiggle, swinging the monitor). During a telegraph it heads for its target; catching the cheat slaps it away (*SMACK!*). From Unhinged, at most once per 3 Otto turns and never on your turn, it does cosmetic sabotage (drags or minimises TOOLBOX.EXE, shuffles floppies, drags the bubble).
+- **Otto's cursor** (pink pixel hand tagged OTTO, never takes clicks) performs every action before it lands: moves (glide, hover, click), rule changes (types the new rule into RULES.TXT, then NEW_RULE.EXE), and each cheat (light switch, pixel pen, `MINIONS/` folder, trash can, double click with a wiggle, swinging the monitor). During a telegraph it heads for its target; catching the cheat slaps it away (*SMACK!*). From Unhinged, at most once per 3 Otto turns and never on your turn, it does cosmetic sabotage (drags or minimises TOOLBOX.EXE, shuffles floppies, shoves the speech bar aside).
 - **`OTTO@AGENT:~$` terminal** in Otto's column: a typed command + result before each action (`scan --board`, `place --cell=C3`, `cheat.markSteal`, `rules.rewrite --win=5`, `ui.drag`...), the Snowflake reasoning, and panicked commands at Meltdown.
 - **Roaming minions** on the interface (never the board): Irritated 1, Unhinged 3, Meltdown 6. Chewer, Thief (steals a floppy), Graffiti, Unplugger (dims the screen until you click the cable), Heckler, Dancer. Bonk one for +1 (max 5 per round).
 - **Glitching** grows from patience 75 down to 0 (scanlines → RGB split/corrupted letters → shifted slices/(Not Responding) → smears/inverted blocks/shudder → tears/pulsing cracks/cursor trail); short bursts, never over the board, turn indicator or pop-ups.
@@ -180,8 +180,9 @@ Smug, petty, theatrical and funny — never cruel. Speaks in yellow pixel speech
 2. **Game screen:**
    - Top bar: the title, `ROUND n · YOU a – b OTTO`, a Snowflake status floppy disk, the Calm mode toggle and a mute button
    - Left: `TOOLBOX.EXE` (points and the power-up floppy disks)
-   - Centre: the turn indicator, then the board inside a big pixel CRT monitor (win banner on its screen), then one message line
-   - Right: Otto on a small pixel CRT with its speech bubble and patience bar, then `RULES.TXT`
+   - Centre: the turn indicator, then the board inside a big pixel CRT monitor (win banner on its screen), then **Otto's speech bar** directly below it, as wide as the monitor (sunny yellow, a tiny Otto face on the left, max 2 lines, a stepped tail pointing up-right at Otto)
+   - Right: Otto on a small pixel CRT with his patience bar, then the `OTTO@AGENT:~$` terminal taking all the space down to `RULES.TXT`, then `RULES.TXT`
+   - The terminal is the whole match's scrollable history (last 100 lines, pixel scrollbar, long lines wrap): commands pink, results lime, Otto's spoken lines yellow (`OTTO:`), game notices cyan (`SYS:`, e.g. `SYS: Otto cheated: Minion Drop!`), and a `──── ROUND 2 ────` divider per round. It follows the newest line; if the player scrolled up it stays put and shows a `▼ new` button.
 3. **End screens:** the rampage (player wins) or the `OTTO WINS` banner (`RESULT.EXE`), each with the Humans vs Otto leaderboard and a way to play again.
 
 ## Art direction: retro pixel art
@@ -210,7 +211,7 @@ Smug, petty, theatrical and funny — never cruel. Speaks in yellow pixel speech
 - Panels are old operating-system windows: a navy title bar `#1B2A6B` with a pixel title (e.g. `RULES.TXT`, `TOOLBOX.EXE`), little `_ □ ×` buttons (decorative), a cream or white body, a chunky 3px pixel outline and a hard shadow.
 - Buttons are chunky pixel buttons that visibly press down 3px when clicked.
 - The cursor is a custom pixel hand cursor (a data-URI SVG), and a pixel pointing hand when hovering over clickable things.
-- Speech bubbles are pixel bubbles in sunny yellow with an indigo outline and a stepped tail.
+- Otto's speech bar is a sunny yellow (#FFE45C) pixel box with a 3px #140A2E outline, a hard shadow and a stepped tail.
 
 **Background:** a purple or indigo wall with a few slowly drifting pixel floppy disks and binary digits (`0 1`) in lime, low opacity. A desk strip runs along the bottom. Turn the drifting off when `prefers-reduced-motion` is set.
 
