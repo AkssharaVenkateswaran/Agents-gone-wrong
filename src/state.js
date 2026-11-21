@@ -50,6 +50,7 @@ export function freshMatchState() {
     stats: newStats(),
     log: newLog(),          // what happened this match (saved to Otto's memory in Snowflake)
     memory: { status: 'idle', stats: null }, // Otto's memory: 'idle' | 'loading' | 'ready' | 'offline'
+    terminal: [],           // OTTO@AGENT:~$ — Otto's commands and their results (see terminal.js)
     tactics: null,          // what beats humans across everyone's games (GET /api/tactics), or null
     matchOver: false,
     result: null,           // 'X' (patience drained) or 'O' (Otto won 3 rounds)

@@ -239,6 +239,7 @@ function render() {
       ${renderCentre()}
       <aside class="otto-side">
         ${renderOtto()}
+        ${renderTerminal()}
         ${renderRules()}
       </aside>
     </div>
@@ -744,6 +745,31 @@ function renderOtto() {
     </section>`;
 }
 
+// --- Right: Otto's terminal (OTTO@AGENT:~$) ----------------------------------------------------
+// The newest command types itself out (kept smooth across redraws with since()).
+const TERMINAL_SHOWN = 3; // entries on screen (each is a command + a result line)
+function renderTerminal() {
+  const entries = (state.terminal || []).slice(-TERMINAL_SHOWN);
+  const lines = entries.map((entry, n) => {
+    const newest = n === entries.length - 1;
+    const typeMs = Math.min(900, entry.command.length * 22);
+    const elapsed = newest ? since(entry.at, typeMs + 200) : null;
+    const typing = elapsed !== null
+      ? `style="--chars:${entry.command.length};--type:${typeMs}ms;animation-delay:${-elapsed}ms"`
+      : '';
+    return `
+      <div class="term-entry">
+        <div class="term-cmd ${typing ? 'typing' : ''}" ${typing}><span class="prompt">OTTO@AGENT:~$</span> ${escapeHtml(entry.command)}</div>
+        <div class="term-result ${typing ? 'waiting' : ''}" ${typing ? `style="animation-delay:${typeMs - elapsed}ms"` : ''}>&gt; ${escapeHtml(entry.result)}</div>
+      </div>`;
+  }).join('');
+  return `
+    <section class="terminal window" aria-label="Otto's terminal" aria-live="polite">
+      ${titleBar('OTTO@AGENT:~$')}
+      <div class="terminal-body">${lines || '<div class="term-entry"><span class="prompt">OTTO@AGENT:~$</span> <span class="term-cursor">_</span></div>'}</div>
+    </section>`;
+}
+
 // --- Right: RULES.TXT -------------------------------------------------------------------------
 function renderRules() {
   const now = currentTurn(state);
@@ -789,8 +815,8 @@ function renderRules() {
       ${titleBar('RULES.TXT')}
       <div class="window-body">
         ${rowsHtml}
-        <p class="countdown">${sprite(HOURGLASS)} ${countdown}${state.amendmentPending ? ' (YOU PICK)' : ''}</p>
-        <p class="turn-count">TURN ${Math.min(now, ROUND_TURN_CAP)}/${ROUND_TURN_CAP} · SUDDEN DEATH AT ${ROUND_TURN_CAP}</p>
+        <p class="countdown">${sprite(HOURGLASS)} ${countdown}${state.amendmentPending ? ' (YOU PICK)' : ''}
+          <span class="turn-count" title="Sudden death after turn ${ROUND_TURN_CAP}">· TURN ${Math.min(now, ROUND_TURN_CAP)}/${ROUND_TURN_CAP}</span></p>
         ${history ? `<details class="history"><summary>HISTORY (${state.ruleHistory.length})</summary><ul>${history}</ul></details>` : ''}
       </div>
     </section>`;

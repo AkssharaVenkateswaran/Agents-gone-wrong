@@ -59,6 +59,7 @@ import {
 import { say, sayRule, sayFromMemory, sayCatchRate, shout, RAMPAGE_LINES } from './dialogue.js';
 import { fetchStats, saveMatch, fetchTactics } from './memory.js';
 import { cheatReasoning, ruleReasoning } from './tactics.js';
+import { termLog, cellName, panicLine, scanResult } from './terminal.js';
 import { FIRST_MOVES, cleanName } from './matchLog.js';
 import { sfx, setMuted, setDetune, startBuzz, stopBuzz } from './sfx.js';
 import {
@@ -525,6 +526,8 @@ async function ruleChangeScene() {
     if (!picked) return true;
     change = { ...picked, oldId: before[getRule(picked.ruleId).category].ruleId };
     // Otto's cursor opens RULES.TXT, deletes the old rule and types the new one.
+    if (picked.dataDriven) logReasoning(ruleReasoning(state.tactics, getRule(picked.ruleId)));
+    termLog(state, ruleCommand(picked.ruleId), 'rule updated. good luck, human.');
     const typing = generation;
     await performRuleRewrite(getRule(picked.ruleId).category, getRule(picked.ruleId).name, sfx.click);
     if (typing !== generation) return false;
@@ -536,8 +539,7 @@ async function ruleChangeScene() {
   noteRules();
   musicEvent('ruleChange'); // record scratch, then bass only while the pop-up is open
   state.ruleScene = { phase: 'show', change };
-  if (change.dataDriven) state.ottoSays = ruleReasoning(state.tactics, getRule(change.ruleId));
-  else talk(sayRule(change.ruleId));
+  talk(sayRule(change.ruleId));
   state.notice = '';
   emit('change');
   const myGeneration = generation;
@@ -579,8 +581,11 @@ async function ottoTurn() {
     return;
   }
 
-  // Otto thinks: eyes look around, dots in its bubble.
+  // Otto thinks: eyes look around, dots in its bubble — and it scans the board.
   state.ottoThinking = true;
+  const reverse = isReverseDay(state);
+  termLog(state, 'scan --board', scanResult(state, reverse ? [] : winningSquares(state, 'O'), reverse ? [] : winningSquares(state, 'X')));
+  if (stage() === 3 && !state.calm && Math.random() < 0.35) termLog(state, ...panicLine());
   emit('change');
   if (!(await pause(THINK_MIN_MS + Math.random() * THINK_EXTRA_MS))) return;
   state.ottoThinking = false;
@@ -600,8 +605,9 @@ async function ottoTurn() {
     // Sometimes Otto brags with a real stat: "Only 23% of humans catch my Mark Steal."
     const brag = sayCatchRate(state.memory.stats, cheat.id, cheat.name);
     if (brag && Math.random() < 0.4) state.ottoSays = brag;
-    // If everyone's games shaped this pick, Otto shows its reasoning like a terminal.
-    if (dataDriven) state.ottoSays = cheatReasoning(state.tactics, cheat);
+    // If everyone's games shaped this pick, Otto's terminal shows its reasoning.
+    if (dataDriven) logReasoning(cheatReasoning(state.tactics, cheat));
+    termLog(state, ...cheatCommand(cheat, trial));
     emit('change');
     // Meanwhile Otto's cursor visibly heads for its target.
     performTelegraph(cheat, state, trial);
@@ -626,6 +632,50 @@ async function ottoTurn() {
   await ottoNormalMove();
 }
 
+// The terminal command for a rule change, e.g. rules.rewrite --win=5.
+function ruleCommand(ruleId) {
+  const flags = {
+    three: '--win=3', four: '--win=4', five: '--win=5', noDiagonals: '--win=straight', onlyDiagonals: '--win=diagonal',
+    gravity: '--place=gravity', lava: '--place=lava', touch: '--place=touch',
+    fade: '--twist=fade', mirror: '--twist=mirror', timer: '--twist=timer', reverse: '--twist=reverse',
+  };
+  return `rules.rewrite ${flags[ruleId] || `--rule=${ruleId}`}`;
+}
+
+// Reasoning text "OTTO@AGENT:~$ command\n> result" -> a terminal entry.
+function logReasoning(text) {
+  const [command, result] = text.split('\n');
+  termLog(state, command.replace('OTTO@AGENT:~$ ', ''), result.replace(/^> /, ''));
+}
+
+// The terminal command for each cheat (what Otto is about to do).
+function cheatCommand(cheat, trial) {
+  const board = trial.board;
+  const changed = (test) => board.cells.map((_, i) => i).filter(test);
+  switch (cheat.id) {
+    case 'lightsOut':
+      return ['lights.off', 'lights off. good luck seeing.'];
+    case 'minionDrop': {
+      const cells = changed((i) => board.minions[i] && !state.board.minions[i]).map((i) => cellName(board, i));
+      return [`minion.deploy --cells=${cells.join(',')}`, `${cells.length} minion${cells.length === 1 ? '' : 's'} deployed. hehe.`];
+    }
+    case 'markSteal': {
+      const [i] = changed((k) => board.stolen[k] && !state.board.stolen[k]);
+      return [`cheat.markSteal --cell=${cellName(board, i)}`, 'your X is mine now.'];
+    }
+    case 'extraLine':
+      return ['cheat.extraLine --draw', 'more board. more problems.'];
+    case 'doubleMove':
+      return ['cheat.doubleMove --times=2', 'two moves. rules are for humans.'];
+    case 'boardSpin':
+      return ['cheat.boardSpin --deg=90', 'wheee.'];
+    case 'rewriteRules':
+      return ['cheat.rewriteRules --now', 'early rule change scheduled.'];
+    default:
+      return [`cheat.${cheat.id}`, 'done.'];
+  }
+}
+
 // Cosmetic interface sabotage by Otto's cursor (stage 2+, not in Calm mode).
 // Returns false if the match was reset meanwhile.
 const SABOTAGE_GAP = 3;
@@ -635,6 +685,14 @@ async function maybeSabotage(force = null) {
   state.lastSabotageTurn = state.turnNumber;
   const kinds = ['dragToolbox', 'minimiseToolbox', 'shuffleDisks', 'hideBubble'];
   const kind = force || kinds[Math.floor(Math.random() * kinds.length)];
+  const commands = {
+    dragToolbox: ['ui.drag --window=TOOLBOX.EXE', 'oops. moved it.'],
+    minimiseToolbox: ['ui.minimise --window=TOOLBOX.EXE', 'toolbox gone. bye.'],
+    shuffleDisks: ['ui.shuffle --target=floppies', 'good luck finding anything.'],
+    hideBubble: ['ui.drag --window=bubble --to=patience', "you didn't see that."],
+  };
+  termLog(state, ...commands[kind]);
+  emit('change');
   const myGeneration = generation;
   await performSabotage(kind, (value) => applySabotage(kind, value), sfx.click);
   return myGeneration === generation;
@@ -687,6 +745,7 @@ function catchCheat() {
   musicEvent('cheatCaught');
   showPopup('CAUGHT!');
   slap(); // Otto's cursor gets slapped away
+  termLog(state, `cheat.${cheat.id}`, 'ERROR: caught by human. ow.');
   if (state.patience <= 0) patienceRanOut();
 }
 
@@ -732,6 +791,8 @@ async function ottoNormalMove() {
   const landing = chooseMove(state);
   if (landing !== undefined) {
     // Otto's cursor glides to the cell, hovers, clicks — then the O appears.
+    termLog(state, `place --cell=${cellName(state.board, landing)}`, 'O placed. your move, human.');
+    emit('change');
     const myGeneration = generation;
     await performMove(landing, sfx.click);
     if (myGeneration !== generation) return;

@@ -528,7 +528,7 @@ button, summary, [data-cell], .rule-row { cursor: var(--cursor-hand); }
 .pips i { width: 9px; height: 9px; border: 3px solid var(--ink); }
 .pips i.on { background: var(--pink); }
 .countdown { margin: 4px 0 0; display: flex; align-items: center; gap: 8px; font: 22px var(--text-font); --px: 2; }
-.turn-count { margin: 0; font: 20px var(--text-font); }
+.turn-count { font: 20px var(--text-font); opacity: 0.8; }
 .history summary { font: 12px/1.6 var(--pixel-font); }
 .history ul { margin: 4px 0 0; padding-left: 16px; font: 20px/1.1 var(--text-font); }
 .history s { text-decoration-color: var(--pink); }
@@ -831,6 +831,39 @@ body.calm .extra { animation: none; }
 .taskbar-note { margin: 0; font: 20px var(--text-font); color: var(--cream); }
 .bubble.dragged { translate: 0 64px; z-index: 3; }
 
+/* ==========================================================================
+   Otto's terminal: OTTO@AGENT:~$ (AGENTIC.md section 2)
+   ========================================================================== */
+.terminal { flex: none; }
+.terminal-body {
+  height: 106px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 4px 8px;
+  background: #000;
+  color: var(--lime);
+  font: 18px/1 var(--text-font);
+  text-shadow: var(--glow);
+}
+.term-cmd, .term-result { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.term-result { color: var(--phosphor); padding-left: 8px; }
+.prompt { color: var(--pink); }
+/* the newest command types itself out, then its result appears */
+.term-cmd.typing { max-width: 0; animation: type-in var(--type) steps(var(--chars)) forwards; }
+@keyframes type-in { to { max-width: 100%; } }
+.term-result.waiting { visibility: hidden; animation: show-line 0s linear forwards; }
+@keyframes show-line { to { visibility: visible; } }
+.term-cursor { animation: blink 1s steps(1) infinite; }
+@media (max-height: 820px) {
+  .terminal-body { height: 54px; }             /* 2 entries on short screens */
+  .otto-side { gap: 8px; }
+  .otto-area { gap: 4px; }
+  .bubble { min-height: 52px; }
+  .rule-row { padding: 1px 4px; }
+}
+
 /* --- Reduced motion: nothing drifts, bounces, spins or flies. --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .drift, .dots i, .otto-face.think .f1, .otto-face.think .f2, .otto-face.flicker,
@@ -842,6 +875,8 @@ body.calm .extra { animation: none; }
   .alert-popup { animation: fade-out 1.6s steps(1) forwards; }
   .confetti { display: none; }
   .extra, .wipe-new { animation: none; }
+  .term-cmd.typing { animation: none; max-width: 100%; }
+  .term-result.waiting { animation: none; visibility: visible; }
   .monitor { animation: none !important; transition: none; }  /* static tilt only */
   .bubble.jitter, .sparks i, .static-band, .fall, .rampage-chaos .disk, .rampage-chaos .rules, .shards i { animation: none !important; }
   .crt-off i { animation: fade-out 1.2s steps(2) forwards; }
